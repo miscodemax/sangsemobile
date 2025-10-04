@@ -1,0 +1,6 @@
+# .easignore
+node_modules
+.git
+AppData
+.DS_Store
+.env
