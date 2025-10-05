@@ -1,45 +1,213 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { Platform } from 'react-native';
+import { useAuth } from "@/context/authContext";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { Tabs, useRouter } from "expo-router";
+import React, { useState } from "react";
+import { Platform, StyleSheet, TouchableOpacity, View } from "react-native";
 
-import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+// 🎨 Palette de couleurs
+const COLORS = {
+  primary: "#FFD700",
+  inactive: "#888",
+  background: "#111",
+  badge: "#FF3B30",
+};
 
+// 🔔 Icône avec badge
+const TabBarIconWithBadge = ({ name, color, size, badgeCount = 0 }) => (
+  <View style={{ width: size, height: size }}>
+    <Ionicons name={name} size={size} color={color} />
+    {badgeCount > 0 && <View style={styles.badgeContainer} />}
+  </View>
+);
+
+// ➕ Bouton central personnalisé
+const CustomTabBarButton = ({ onPress }) => (
+  <TouchableOpacity
+    style={styles.fabContainer}
+    activeOpacity={0.9}
+    onPress={onPress}
+  >
+    <View style={styles.fab}>
+      <Ionicons name="add" size={34} color={COLORS.background} />
+    </View>
+  </TouchableOpacity>
+);
+
+// 🧭 Layout principal
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const [favoriteNotifications] = useState(2);
+  const [profileNotifications] = useState(0);
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
-        tabBarStyle: Platform.select({
-          ios: {
-            // Use a transparent background on iOS to show the blur effect
-            position: 'absolute',
-          },
-          default: {},
-        }),
-      }}>
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.inactive,
+        tabBarStyle: styles.tabBarStyle,
+        tabBarLabelStyle: styles.tabBarLabelStyle,
+      }}
+    >
+      {/* 🏠 Accueil */}
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: "Accueil",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "home" : "home-outline"}
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+        listeners={{
+          tabPress: () =>
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
         }}
       />
+
+      {/* 🔍 Explorer */}
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: "Explorer",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "search" : "search-outline"}
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+        listeners={{
+          tabPress: () =>
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
         }}
       />
+
+      {/* ➕ Bouton central "Vendre" */}
+      <Tabs.Screen
+        name="vendre"
+        options={{
+          tabBarShowLabel: false,
+          tabBarButton: (props) => (
+            <CustomTabBarButton
+              {...props}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push("/vendre");
+              }}
+            />
+          ),
+        }}
+      />
+
+      {/* ❤️ Favoris */}
+      <Tabs.Screen
+        name="favoris"
+        options={{
+          title: "Favoris",
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabBarIconWithBadge
+              name={focused ? "heart" : "heart-outline"}
+              size={size}
+              color={color}
+              badgeCount={favoriteNotifications}
+            />
+          ),
+        }}
+        listeners={{
+          tabPress: () =>
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
+        }}
+      />
+
+      {/* 👤 Profil dynamique */}
+      <Tabs.Screen
+        name="profile/[id]"
+        initialParams={{ id: user?.id }}
+        options={{
+          title: "Profil",
+          tabBarIcon: ({ color, size, focused }) => (
+            <TabBarIconWithBadge
+              name={focused ? "person" : "person-outline"}
+              size={size}
+              color={color}
+              badgeCount={profileNotifications}
+            />
+          ),
+        }}
+        listeners={{
+          tabPress: (e) => {
+            if (!user?.id) {
+              e.preventDefault();
+              // tu peux afficher ton modal d’auth ici
+            } else {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+          },
+        }}
+      />
+
+      {/* 🔒 Pages cachées */}
+      <Tabs.Screen name="product/[id]" options={{ href: null }} />
+      <Tabs.Screen name="edit/[id]" options={{ href: null }} /> {/* 👈 CACHÉ */}
     </Tabs>
   );
 }
+
+// 💅 Styles
+const styles = StyleSheet.create({
+  tabBarStyle: {
+    backgroundColor: COLORS.background,
+    borderTopWidth: 0,
+    height: Platform.OS === "ios" ? 90 : 70,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    elevation: 0,
+  },
+  tabBarLabelStyle: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: -5,
+    marginBottom: Platform.OS === "ios" ? -15 : 5,
+  },
+  fabContainer: {
+    top: -25,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 10,
+  },
+  fab: {
+    width: 65,
+    height: 65,
+    borderRadius: 32.5,
+    backgroundColor: COLORS.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 4,
+    borderColor: COLORS.background,
+  },
+  badgeContainer: {
+    position: "absolute",
+    right: -6,
+    top: -2,
+    backgroundColor: COLORS.badge,
+    borderRadius: 8,
+    width: 10,
+    height: 10,
+    borderWidth: 2,
+    borderColor: COLORS.background,
+  },
+});

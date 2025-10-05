@@ -92,7 +92,7 @@ export default function ProductDetailScreen() {
     const handleBuyNow = () => {
         if (!product) return;
         console.log('hello');
-        
+
         //router.push(`/payment/escrow?productId=${product.id}`);
     };
 
@@ -306,33 +306,44 @@ export default function ProductDetailScreen() {
                     {/* Seller card - Premium style */}
                     <TouchableOpacity
                         style={styles.sellerCard}
-                        onPress={() => router.push(`/`)}
-                        activeOpacity={0.7}
+                        onPress={() => router.push(`/profile/${product.seller.id}`)}
+                        activeOpacity={0.8}
                     >
                         <View style={styles.sellerRow}>
+                            {/* Avatar */}
                             <Image
                                 source={{ uri: product.seller.avatar_url }}
                                 style={styles.sellerAvatar}
                             />
+
+                            {/* Infos vendeur */}
                             <View style={styles.sellerInfo}>
                                 <Text style={styles.sellerName}>{product.seller.username}</Text>
-                                {product.seller.bio && (
-                                    <Text style={styles.sellerBio} numberOfLines={1}>
+
+                                {/* Bio */}
+                                {product.seller.bio ? (
+                                    <Text style={styles.sellerBio} numberOfLines={1} ellipsizeMode="tail">
                                         {product.seller.bio}
                                     </Text>
-                                )}
+                                ) : null}
+
+                                {/* Stats */}
                                 <View style={styles.sellerStats}>
                                     <View style={styles.statItem}>
                                         <Ionicons name="star" size={14} color="#F6C445" />
                                         <Text style={styles.statText}>4.8</Text>
                                     </View>
+
                                     <View style={styles.statDivider} />
+
                                     <View style={styles.statItem}>
                                         <Ionicons name="cube" size={14} color="#666" />
                                         <Text style={styles.statText}>24 ventes</Text>
                                     </View>
                                 </View>
                             </View>
+
+                            {/* Chevron */}
                             <Ionicons name="chevron-forward" size={20} color="#999" />
                         </View>
                     </TouchableOpacity>
@@ -408,8 +419,8 @@ export default function ProductDetailScreen() {
             <View style={styles.bottomCTA}>
                 <BlurView intensity={95} style={StyleSheet.absoluteFill} tint="light" />
                 <View style={styles.ctaContent}>
-                    <TouchableOpacity 
-                    style={styles.contactButton}
+                    <TouchableOpacity
+                        style={styles.contactButton}
                     >
                         <Ionicons name="chatbubble-ellipses-outline" size={24} color="#1C2B49" />
                     </TouchableOpacity>

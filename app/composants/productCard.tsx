@@ -1,8 +1,10 @@
+import AuthModal from "./authModal"; // ✅ ton modal d'authentification
+import { useAuth } from "@/context/authContext"; // ✅ utilise ton AuthContext
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import React, { useState } from "react";
 import {
-    Animated,
+    Dimensions,
     Image,
     StyleSheet,
     Text,
@@ -10,96 +12,123 @@ import {
     View,
 } from "react-native";
 
-type ProductCardProps = {
-    id: number;
-    title: string;
+const { width } = Dimensions.get("window");
+const CARD_WIDTH = (width - 48) / 2;
+
+interface Product {
+    id: string | number;
+    name?: string;
+    title?: string;
+    description?: string;
     price: number;
+    image?: string;
     image_url?: string;
+    category?: string;
+    created_at?: string;
     seller?: string;
     location?: string;
-    isLiked?: boolean;
     condition?: string;
-};
+    product_like?: { count: number }[];
+}
 
-export default function ProductCard({
-    id,
-    title,
-    price,
-    image_url,
-    seller = "Vendeur",
-    location = "Dakar",
-    isLiked = false,
-    condition = "Comme neuf",
-}: ProductCardProps) {
-    const router = useRouter();
-    const [liked, setLiked] = useState(isLiked);
-    const [scaleValue] = useState(new Animated.Value(1));
+interface ProductCardProps {
+    product: Product;
+    onPress: () => void;
+}
 
-    const handlePressIn = () => {
-        Animated.spring(scaleValue, {
-            toValue: 0.97,
-            useNativeDriver: true,
-        }).start();
+export default function ProductCard({ product, onPress }: ProductCardProps) {
+    const { user } = useAuth(); // ✅ récupère l'utilisateur connecté
+    const [liked, setLiked] = useState(false);
+    const [imageError, setImageError] = useState(false);
+    const [showAuthModal, setShowAuthModal] = useState(false);
+
+    const productName = product.name || product.title || "Sans titre";
+    const productImage = product.image || product.image_url;
+    const likesCount = product.product_like?.[0]?.count || 0;
+
+    const formatPrice = (price: number) => {
+        if (price >= 1000000) return `${(price / 1000000).toFixed(1)}M`;
+        if (price >= 1000) return `${(price / 1000).toFixed(0)}k`;
+        return `${price}`;
     };
 
-    const handlePressOut = () => {
-        Animated.spring(scaleValue, {
-            toValue: 1,
-            friction: 3,
-            tension: 40,
-            useNativeDriver: true,
-        }).start();
+    const getTimeAgo = (dateString?: string) => {
+        if (!dateString) return "";
+        const now = new Date();
+        const created = new Date(dateString);
+        const diff = Math.floor((now.getTime() - created.getTime()) / 1000);
+        if (diff < 3600) return "Nouveau";
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+        if (diff < 604800) return `${Math.floor(diff / 86400)}j`;
+        return `${Math.floor(diff / 604800)}sem`;
     };
 
-    const handleLike = () => {
-        setLiked(!liked);
-        Animated.sequence([
-            Animated.timing(scaleValue, {
-                toValue: 1.1,
-                duration: 100,
-                useNativeDriver: true,
-            }),
-            Animated.timing(scaleValue, {
-                toValue: 1,
-                duration: 100,
-                useNativeDriver: true,
-            }),
-        ]).start();
+    const handleLike = async (e: any) => {
+        e.stopPropagation();
+
+        // 🧠 Vérifie la connexion via le contexte
+        if (!user) {
+            setShowAuthModal(true); // ✅ Ouvre le AuthModal
+            return;
+        }
+
+        // ❤️ Toggle du like
+        const newLiked = !liked;
+        setLiked(newLiked);
+
+        try {
+            if (newLiked) {
+                const { error } = await supabase.from("product_like").insert([
+                    {
+                        product_id: product.id,
+                        user_id: user.id,
+                    },
+                ]);
+                if (error) console.error("Erreur like:", error);
+            } else {
+                const { error } = await supabase
+                    .from("product_like")
+                    .delete()
+                    .eq("product_id", product.id)
+                    .eq("user_id", user.id);
+                if (error) console.error("Erreur unlike:", error);
+            }
+        } catch (err) {
+            console.error("Erreur requête like:", err);
+        }
     };
+
+    const isNew = product.created_at && getTimeAgo(product.created_at) === "Nouveau";
 
     return (
-        <Animated.View
-            style={[
-                styles.container,
-                {
-                    transform: [{ scale: scaleValue }],
-                },
-            ]}
-        >
+        <>
+            {/* --- 🛍️ Carte du produit --- */}
             <TouchableOpacity
-                activeOpacity={1}
-                onPress={() => router.push(`/product/${id}`)}
-                onPressIn={handlePressIn}
-                onPressOut={handlePressOut}
+                style={styles.card}
+                onPress={onPress}
+                activeOpacity={0.7}
             >
-                {/* Image du produit */}
                 <View style={styles.imageContainer}>
-                    <Image
-                        source={{
-                            uri:
-                                image_url ||
-                                "https://via.placeholder.com/400x400.png?text=Produit",
-                        }}
-                        style={styles.image}
-                        resizeMode="cover"
-                    />
+                    {imageError || !productImage ? (
+                        <View style={styles.imagePlaceholder}>
+                            <Ionicons name="image-outline" size={32} color="#D1D5DB" />
+                        </View>
+                    ) : (
+                        <Image
+                            source={{ uri: productImage }}
+                            style={styles.image}
+                            resizeMode="cover"
+                            onError={() => setImageError(true)}
+                        />
+                    )}
 
-                    {/* Badge condition */}
-                    <View style={styles.conditionBadge}>
-                        <Text style={styles.conditionText}>{condition}</Text>
-                    </View>
+                    {isNew && (
+                        <View style={styles.newBadge}>
+                            <Ionicons name="flash" size={10} color="#FFF" />
+                            <Text style={styles.newText}>New</Text>
+                        </View>
+                    )}
 
-                    {/* Bouton favori */}
                     <TouchableOpacity
                         style={styles.likeButton}
                         onPress={handleLike}
@@ -107,225 +136,135 @@ export default function ProductCard({
                     >
                         <Ionicons
                             name={liked ? "heart" : "heart-outline"}
-                            size={22}
-                            color={liked ? "#EF4444" : "#fff"}
+                            size={18}
+                            color={liked ? "#EF4444" : "#FFF"}
                         />
                     </TouchableOpacity>
-
-                    {/* Overlay gradient */}
-                    <View style={styles.imageOverlay} />
                 </View>
 
-                {/* Informations produit */}
-                <View style={styles.infoContainer}>
-                    {/* Titre */}
-                    <Text style={styles.title} numberOfLines={2}>
-                        {title}
+                <View style={styles.content}>
+                    <Text style={styles.name} numberOfLines={2}>
+                        {productName}
                     </Text>
 
-                    {/* Prix */}
-                    <View style={styles.priceContainer}>
-                        <Text style={styles.price}>{price.toLocaleString()} FCFA</Text>
-                        <View style={styles.priceBadge}>
-                            <Ionicons name="flash" size={14} color="#FACC15" />
+                    <View style={styles.footer}>
+                        <View style={styles.priceRow}>
+                            <Text style={styles.price}>{formatPrice(product.price)}</Text>
+                            <Text style={styles.currency}>FCFA</Text>
                         </View>
+
+                        {likesCount > 0 && (
+                            <View style={styles.likesContainer}>
+                                <Ionicons name="heart" size={10} color="#EF4444" />
+                                <Text style={styles.likesCount}>{likesCount}</Text>
+                            </View>
+                        )}
                     </View>
 
-                    {/* Informations vendeur et localisation */}
-                    <View style={styles.metaContainer}>
-                        <View style={styles.sellerInfo}>
-                            <View style={styles.avatar}>
-                                <Ionicons name="person" size={12} color="#78716C" />
-                            </View>
-                            <Text style={styles.sellerName} numberOfLines={1}>
-                                {seller}
+                    {product.location && (
+                        <View style={styles.locationRow}>
+                            <Ionicons name="location" size={10} color="#9CA3AF" />
+                            <Text style={styles.location} numberOfLines={1}>
+                                {product.location}
                             </Text>
                         </View>
-
-                        <View style={styles.locationInfo}>
-                            <Ionicons name="location-sharp" size={12} color="#78716C" />
-                            <Text style={styles.locationText}>{location}</Text>
-                        </View>
-                    </View>
-
-                    {/* Indicateur de popularité */}
-                    <View style={styles.popularityContainer}>
-                        <View style={styles.viewsInfo}>
-                            <Ionicons name="eye-outline" size={14} color="#78716C" />
-                            <Text style={styles.viewsText}>234</Text>
-                        </View>
-                        <View style={styles.likesInfo}>
-                            <Ionicons name="heart-outline" size={14} color="#78716C" />
-                            <Text style={styles.likesText}>12</Text>
-                        </View>
-                    </View>
+                    )}
                 </View>
             </TouchableOpacity>
-        </Animated.View>
+
+            {/* --- 🔐 Modal d’authentification intégré --- */}
+            <AuthModal
+                visible={showAuthModal}
+                onClose={() => setShowAuthModal(false)}
+            />
+        </>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        backgroundColor: "#fff",
-        borderRadius: 20,
+    card: {
+        backgroundColor: "#FFFFFF",
+        borderRadius: 18,
         overflow: "hidden",
         shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: 4,
-        },
+        shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 5,
-        marginBottom: 16,
+        shadowRadius: 10,
+        elevation: 4,
     },
     imageContainer: {
-        position: "relative",
         width: "100%",
-        height: 220,
-        backgroundColor: "#F5F5F4",
+        height: CARD_WIDTH * 1.15,
+        position: "relative",
+        backgroundColor: "#F9FAFB",
     },
     image: {
         width: "100%",
         height: "100%",
     },
-    imageOverlay: {
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 60,
-        backgroundColor: "transparent",
+    imagePlaceholder: {
+        width: "100%",
+        height: "100%",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#F3F4F6",
     },
-    conditionBadge: {
+    newBadge: {
         position: "absolute",
-        top: 12,
-        left: 12,
-        backgroundColor: "#FACC15",
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-        elevation: 3,
+        top: 10,
+        left: 10,
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#10B981",
+        paddingHorizontal: 8,
+        paddingVertical: 5,
+        borderRadius: 10,
+        gap: 3,
     },
-    conditionText: {
-        color: "#292524",
-        fontSize: 11,
-        fontWeight: "700",
-        letterSpacing: 0.3,
+    newText: {
+        fontSize: 9,
+        fontWeight: "800",
+        color: "#FFF",
+        textTransform: "uppercase",
     },
     likeButton: {
         position: "absolute",
-        top: 12,
-        right: 12,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: "rgba(0, 0, 0, 0.4)",
-        alignItems: "center",
+        top: 10,
+        right: 10,
+        width: 32,
+        height: 32,
+        backgroundColor: "rgba(0, 0, 0, 0.6)",
+        borderRadius: 16,
         justifyContent: "center",
-        backdropFilter: "blur(10px)",
+        alignItems: "center",
     },
-    infoContainer: {
-        padding: 16,
-    },
-    title: {
-        fontSize: 15,
+    content: { padding: 12 },
+    name: {
+        fontSize: 14,
         fontWeight: "600",
-        color: "#292524",
-        lineHeight: 20,
-        marginBottom: 10,
-        letterSpacing: -0.2,
+        color: "#1F2937",
+        marginBottom: 8,
+        lineHeight: 18,
     },
-    priceContainer: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 12,
-        gap: 8,
-    },
-    price: {
-        fontSize: 20,
-        fontWeight: "800",
-        color: "#292524",
-        letterSpacing: -0.5,
-    },
-    priceBadge: {
-        backgroundColor: "#FEF3C7",
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    metaContainer: {
+    footer: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 10,
-        paddingTop: 10,
-        borderTopWidth: 1,
-        borderTopColor: "#F5F5F4",
+        marginBottom: 6,
     },
-    sellerInfo: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
-        flex: 1,
-        marginRight: 8,
-    },
-    avatar: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: "#FEF3C7",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    sellerName: {
-        fontSize: 13,
-        color: "#57534E",
-        fontWeight: "500",
-        flex: 1,
-    },
-    locationInfo: {
+    priceRow: { flexDirection: "row", alignItems: "baseline", gap: 4 },
+    price: { fontSize: 18, fontWeight: "800", color: "#F6C445" },
+    currency: { fontSize: 11, fontWeight: "600", color: "#F6C445" },
+    likesContainer: {
         flexDirection: "row",
         alignItems: "center",
         gap: 3,
+        backgroundColor: "#FEE2E2",
+        paddingHorizontal: 7,
+        paddingVertical: 4,
+        borderRadius: 12,
     },
-    locationText: {
-        fontSize: 12,
-        color: "#78716C",
-        fontWeight: "500",
-    },
-    popularityContainer: {
-        flexDirection: "row",
-        gap: 16,
-    },
-    viewsInfo: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-    },
-    viewsText: {
-        fontSize: 12,
-        color: "#78716C",
-        fontWeight: "500",
-    },
-    likesInfo: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-    },
-    likesText: {
-        fontSize: 12,
-        color: "#78716C",
-        fontWeight: "500",
-    },
+    likesCount: { fontSize: 10, color: "#EF4444", fontWeight: "700" },
+    locationRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+    location: { fontSize: 10, color: "#9CA3AF", fontWeight: "500", flex: 1 },
 });
