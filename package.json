@@ -17,6 +17,7 @@
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
     "@supabase/supabase-js": "^2.58.0",
+    "base64-arraybuffer": "^1.0.2",
     "expo": "~53.0.10",
     "expo-auth-session": "~6.2.1",
     "expo-blur": "~14.1.5",
@@ -30,6 +31,7 @@
     "expo-linear-gradient": "^15.0.7",
     "expo-linking": "~7.1.5",
     "expo-location": "~18.1.6",
+    "expo-media-library": "^18.2.0",
     "expo-router": "~5.0.7",
     "expo-splash-screen": "~0.30.9",
     "expo-status-bar": "~2.2.3",
@@ -48,8 +50,10 @@
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-vector-icons": "^10.3.0",
+    "react-native-vision-camera": "^4.7.2",
     "react-native-web": "~0.20.0",
-    "react-native-webview": "13.13.5"
+    "react-native-webview": "13.13.5",
+    "tamagui": "^1.135.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
