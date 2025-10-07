@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -24,59 +25,122 @@ import {
 } from 'react-native';
 import AuthModal from '../composants/authModal';
 
-// Liste des catégories avec des icônes améliorées
 const categories = [
-    { value: 'vetement', label: 'Vêtements', icon: '👗' },
-    { value: 'soins_et_astuces', label: 'Soins & Astuces', icon: '💄' },
-    { value: 'maquillage', label: 'Maquillage', icon: '💋' },
-    { value: 'artisanat', label: 'Artisanat', icon: '🎨' },
-    { value: 'electronique', label: 'Électronique', icon: '📱' },
-    { value: 'accessoire', label: 'Accessoires', icon: '👜' },
-    { value: 'chaussure', label: 'Chaussures', icon: '👠' },
+    { value: 'vetement', label: 'Vêtements', icon: '👗', color: '#ec4899' },
+    { value: 'soins_et_astuces', label: 'Soins & Astuces', icon: '💄', color: '#f97316' },
+    { value: 'maquillage', label: 'Maquillage', icon: '💋', color: '#ef4444' },
+    { value: 'artisanat', label: 'Artisanat', icon: '🎨', color: '#8b5cf6' },
+    { value: 'electronique', label: 'Électronique', icon: '📱', color: '#3b82f6' },
+    { value: 'accessoire', label: 'Accessoires', icon: '👜', color: '#14b8a6' },
+    { value: 'chaussure', label: 'Chaussures', icon: '👠', color: '#f59e0b' },
 ];
 
-// Composant de champ de texte générique amélioré
-const FormField = ({ label, error, children, isOptional = false }) => (
-    <View style={styles.sectionContainer}>
-        <Text style={styles.label}>{label} {!isOptional && <Text style={styles.required}>*</Text>}</Text>
-        {children}
-        {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-);
+// Barre de progression animée
+const ProgressBar = ({ progress }: { progress: number }) => {
+    const animatedWidth = React.useRef(new Animated.Value(0)).current;
 
-// Sélecteur de catégorie avec un design amélioré
-const CategorySelector = ({ categories, selectedCategory, onSelect, error }) => (
-    <View style={styles.sectionContainer}>
-        <Text style={styles.label}>Catégorie <Text style={styles.required}>*</Text></Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20, paddingHorizontal: 20 }}>
-            {categories.map((cat) => (
-                <TouchableOpacity
-                    key={cat.value}
-                    onPress={() => onSelect(cat.value)}
-                    activeOpacity={0.8}
-                    style={[styles.categoryCard, selectedCategory === cat.value && styles.categorySelected]}
-                >
-                    <Text style={styles.categoryIcon}>{cat.icon}</Text>
-                    <Text style={styles.categoryText}>{cat.label}</Text>
-                    {selectedCategory === cat.value && <Ionicons name="checkmark-circle" size={18} color="#F59E0B" style={{ marginLeft: 8 }} />}
-                </TouchableOpacity>
-            ))}
-        </ScrollView>
-        {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-);
+    React.useEffect(() => {
+        Animated.spring(animatedWidth, {
+            toValue: progress,
+            useNativeDriver: false,
+            tension: 50,
+            friction: 7,
+        }).start();
+    }, [progress]);
 
-// Picker d'images avec un design amélioré
+    const width = animatedWidth.interpolate({
+        inputRange: [0, 100],
+        outputRange: ['0%', '100%'],
+    });
+
+    return (
+        <View style={styles.progressContainer}>
+            <View style={styles.progressInfo}>
+                <Text style={styles.progressText}>Progression</Text>
+                <Text style={styles.progressPercent}>{Math.round(progress)}%</Text>
+            </View>
+            <View style={styles.progressBarBg}>
+                <Animated.View style={[styles.progressBarFill, { width }]} />
+            </View>
+        </View>
+    );
+};
+
+// Header moderne avec avatar
+const ModernHeader = ({ displayName, avatarUrl }: { displayName: string; avatarUrl?: string | null }) => {
+    const initials = displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
+    return (
+        <View style={styles.modernHeader}>
+            <View>
+                <Text style={styles.headerGreeting}>Bonjour 👋</Text>
+                <Text style={styles.headerName}>{displayName}</Text>
+                <Text style={styles.headerSubtitle}>Vendez en quelques clics</Text>
+            </View>
+            {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.headerAvatar} />
+            ) : (
+                <View style={styles.headerAvatarPlaceholder}>
+                    <Text style={styles.headerAvatarText}>{initials}</Text>
+                </View>
+            )}
+        </View>
+    );
+};
+
+// Sélecteur de catégorie modernisé
+const CategorySelector = ({ categories, selectedCategory, onSelect, error }) => {
+    return (
+        <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+                <View style={styles.stepBadge}>
+                    <Text style={styles.stepBadgeText}>2</Text>
+                </View>
+                <Text style={styles.sectionTitle}>Catégorie</Text>
+            </View>
+            <Text style={styles.sectionSubtitle}>Choisissez la catégorie qui correspond le mieux</Text>
+
+            <View style={styles.categoryGrid}>
+                {categories.map((cat) => {
+                    const isSelected = selectedCategory === cat.value;
+                    return (
+                        <TouchableOpacity
+                            key={cat.value}
+                            onPress={() => onSelect(cat.value)}
+                            activeOpacity={0.7}
+                            style={[
+                                styles.categoryCard,
+                                isSelected && { ...styles.categoryCardSelected, borderColor: cat.color }
+                            ]}
+                        >
+                            <Text style={styles.categoryIcon}>{cat.icon}</Text>
+                            <Text style={[styles.categoryLabel, isSelected && styles.categoryLabelSelected]}>
+                                {cat.label}
+                            </Text>
+                            {isSelected && (
+                                <View style={[styles.categoryCheck, { backgroundColor: cat.color }]}>
+                                    <Ionicons name="checkmark" size={14} color="#fff" />
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+            {error && <Text style={styles.errorText}>⚠️ {error}</Text>}
+        </View>
+    );
+};
+
+// Image Picker amélioré
 const ImagePickerField = ({ images, setImages, error }) => {
-    const pickImageFromLibrary = async () => {
+    const pickImage = async () => {
         if (images.length >= 5) {
-            Alert.alert('Limite atteinte', 'Vous pouvez ajouter jusqu\'à 5 images.');
+            Alert.alert('Maximum atteint', 'Vous pouvez ajouter jusqu\'à 5 photos.');
             return;
         }
         const result = await ImagePicker.launchImageLibraryAsync({
             allowsEditing: true,
-            aspect: [4, 4],
-            base64: false,
+            aspect: [1, 1],
             quality: 0.8,
         });
         if (!result.canceled) {
@@ -86,22 +150,26 @@ const ImagePickerField = ({ images, setImages, error }) => {
 
     const takePhoto = async () => {
         if (images.length >= 5) {
-            Alert.alert('Limite atteinte', 'Vous pouvez ajouter jusqu\'à 5 images.');
+            Alert.alert('Maximum atteint', 'Vous pouvez ajouter jusqu\'à 5 photos.');
             return;
         }
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-            Alert.alert('Permission refusée', 'Autorisez la caméra pour prendre une photo.');
+            Alert.alert('Permission refusée', 'Autorisez l\'accès à la caméra.');
             return;
         }
         const result = await ImagePicker.launchCameraAsync({
             allowsEditing: true,
-            aspect: [4, 4],
+            aspect: [1, 1],
             quality: 0.8,
         });
         if (!result.canceled) {
             setImages([...images, result.assets[0].uri]);
         }
+    };
+
+    const removeImage = (index: number) => {
+        setImages(images.filter((_, i) => i !== index));
     };
 
     const setAsCover = (index: number) => {
@@ -113,69 +181,90 @@ const ImagePickerField = ({ images, setImages, error }) => {
     };
 
     return (
-        <View style={styles.sectionContainer}>
-            <Text style={styles.label}>Photos <Text style={styles.required}>*</Text></Text>
-            <Text style={styles.helperText}>La première photo sera la couverture. Astuce: bonne lumière = meilleures ventes.</Text>
+        <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+                <View style={[styles.stepBadge, { backgroundColor: '#ec4899' }]}>
+                    <Text style={styles.stepBadgeText}>1</Text>
+                </View>
+                <Text style={styles.sectionTitle}>Vos photos</Text>
+            </View>
+            <Text style={styles.sectionSubtitle}>💡 La première photo sera votre couverture</Text>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroller}>
-                {images.map((uri, i) => (
-                    <View key={i} style={styles.imageContainer}>
-                        <Image source={{ uri }} style={[styles.image, i === 0 && styles.coverImage]} />
-                        <TouchableOpacity style={styles.removeBtn} onPress={() => setImages(images.filter((_, j) => j !== i))}>
-                            <Ionicons name="close-circle" size={24} color="#374151" />
-                        </TouchableOpacity>
-                        {i !== 0 && (
-                            <TouchableOpacity style={styles.coverBtn} onPress={() => setAsCover(i)}>
-                                <Text style={styles.coverBtnText}>Couverture</Text>
-                            </TouchableOpacity>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
+                {images.map((uri, index) => (
+                    <View key={index} style={styles.imageWrapper}>
+                        <Image source={{ uri }} style={styles.imagePreview} />
+
+                        {/* Badge couverture */}
+                        {index === 0 && (
+                            <View style={styles.coverBadge}>
+                                <Text style={styles.coverBadgeText}>Couverture</Text>
+                            </View>
                         )}
-                        {i === 0 && <View style={styles.coverBadge}><Text style={styles.coverBadgeText}>Couverture</Text></View>}
+
+                        {/* Numéro */}
+                        <View style={styles.imageNumber}>
+                            <Text style={styles.imageNumberText}>{index + 1}</Text>
+                        </View>
+
+                        {/* Boutons */}
+                        <View style={styles.imageActions}>
+                            {index !== 0 && (
+                                <TouchableOpacity
+                                    style={styles.setCoverBtn}
+                                    onPress={() => setAsCover(index)}
+                                >
+                                    <Text style={styles.setCoverText}>Couverture</Text>
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                style={styles.removeImageBtn}
+                                onPress={() => removeImage(index)}
+                            >
+                                <Ionicons name="trash-outline" size={18} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 ))}
+
+                {/* Boutons d'ajout */}
                 {images.length < 5 && (
-                    <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                        <TouchableOpacity style={styles.addImage} onPress={pickImageFromLibrary}>
-                            <Ionicons name="image-outline" size={28} color="#6B7280" />
-                            <Text style={styles.addText}>Galerie</Text>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <TouchableOpacity style={styles.addImageBtn} onPress={pickImage}>
+                            <View style={styles.addImageIcon}>
+                                <Ionicons name="images-outline" size={28} color="#f59e0b" />
+                            </View>
+                            <Text style={styles.addImageText}>Galerie</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.addImage, { backgroundColor: '#fff8ef' }]} onPress={takePhoto}>
-                            <Ionicons name="camera-outline" size={28} color="#6B7280" />
-                            <Text style={styles.addText}>Appareil</Text>
+
+                        <TouchableOpacity style={styles.addImageBtn} onPress={takePhoto}>
+                            <View style={styles.addImageIcon}>
+                                <Ionicons name="camera-outline" size={28} color="#f59e0b" />
+                            </View>
+                            <Text style={styles.addImageText}>Photo</Text>
                         </TouchableOpacity>
                     </View>
                 )}
             </ScrollView>
-            {error && <Text style={styles.errorText}>{error}</Text>}
+
+            <Text style={styles.helperText}>📷 {images.length}/5 photos • Formats: JPG, PNG</Text>
+            {error && <Text style={styles.errorText}>⚠️ {error}</Text>}
         </View>
     );
 };
 
-// Composant Header moderne et spacieux
-const TopHeader = ({ displayName, avatarUrl }) => {
-    const initials = (displayName || '').split(' ')[0];
-    return (
-        <View style={styles.headerContainer}>
-            <View style={styles.headerInner}>
-                <View>
-                    <Text style={styles.greeting}>Salut,</Text>
-                    <Text style={styles.displayName}>{displayName || 'ami'}</Text>
-                </View>
-                <View style={styles.headerRight}>
-                    {avatarUrl ? (
-                        <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-                    ) : (
-                        <View style={styles.avatarPlaceholder}>
-                            <Text style={styles.avatarInitials}>{initials || 'U'}</Text>
-                        </View>
-                    )}
-                </View>
-            </View>
-            <Text style={styles.headerSubtitle}>Poster un article devrait être rapide et agréable — commençons !</Text>
-        </View>
-    );
-};
+// Champ de formulaire moderne
+const ModernFormField = ({ label, required, helper, error, children }) => (
+    <View style={styles.formField}>
+        <Text style={styles.fieldLabel}>
+            {label} {required && <Text style={styles.required}>*</Text>}
+        </Text>
+        {helper && <Text style={styles.fieldHelper}>{helper}</Text>}
+        {children}
+        {error && <Text style={styles.errorText}>⚠️ {error}</Text>}
+    </View>
+);
 
-// Composant principal avec des améliorations esthétiques
 export default function SellScreen() {
     const router = useRouter();
     const { user } = useAuth();
@@ -190,36 +279,24 @@ export default function SellScreen() {
     const [errors, setErrors] = useState({});
     const [images, setImages] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
-    const [isFormValid, setIsFormValid] = useState(false);
     const [profile, setProfile] = useState<{ display_name?: string | null; avatar_url?: string | null } | null>(null);
-    const [descCount, setDescCount] = useState(0);
 
     useEffect(() => { if (!user) setAuthVisible(true); }, [user]);
-    useEffect(() => validateForm(), [form, images]);
+
     useEffect(() => {
         if (!user) return;
-        // Try to read a profiles table to get a nicer display name / avatar if available
         let mounted = true;
         (async () => {
             try {
-                const { data, error } = await supabase.from('profiles').select('display_name, avatar_url').eq('id', user.id).maybeSingle();
-                if (error) {
-                    // silent fallback
-                    return;
-                }
-                if (mounted && data) setProfile({ display_name: data.display_name, avatar_url: data.avatar_url });
-            } catch (e) {
-                // ignore
-            }
+                const { data } = await supabase.from('profiles').select('display_name, avatar_url').eq('id', user.id).maybeSingle();
+                if (mounted && data) setProfile(data);
+            } catch (e) { }
         })();
         return () => { mounted = false; };
     }, [user]);
 
-    useEffect(() => { setDescCount(form.description.length); }, [form.description]);
-
     const handleInputChange = (name: string, value: string) => {
         if (name === 'price') {
-            // keep a clean numeric-only value in state but display formatted form
             const numeric = value.replace(/[^0-9]/g, '');
             setForm(prev => ({ ...prev, [name]: numeric }));
         } else if (name === 'whatsappNumber') {
@@ -227,6 +304,7 @@ export default function SellScreen() {
         } else {
             setForm(prev => ({ ...prev, [name]: value }));
         }
+        if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
     };
 
     const prettyPrice = (priceStr: string) => {
@@ -234,53 +312,50 @@ export default function SellScreen() {
         return priceStr.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     };
 
-    const validateForm = () => {
-        let newErrors: any = {};
-        if (!form.title.trim()) newErrors.title = 'Le titre est obligatoire.';
-        if (!form.price.trim()) newErrors.price = 'Le prix est obligatoire.';
-        if (form.price && Number.isNaN(Number(form.price))) newErrors.price = 'Prix invalide.';
-        if (!form.category) newErrors.category = 'La catégorie est obligatoire.';
-        if (images.length === 0) newErrors.images = 'Ajoutez au moins une photo.';
-        setErrors(newErrors);
-        setIsFormValid(Object.keys(newErrors).length === 0);
+    const calculateProgress = () => {
+        let progress = 0;
+        if (images.length > 0) progress += 25;
+        if (form.category) progress += 25;
+        if (form.title) progress += 15;
+        if (form.price) progress += 15;
+        if (form.description) progress += 10;
+        if (form.whatsappNumber) progress += 10;
+        return progress;
     };
 
-    // Fonction pour télécharger les images (optimisée, basée sur lecture base64)
-    const uploadImages = async (imagesToUpload: string[], userId: string, onProgress?: (p: number) => void) => {
+    const validateForm = () => {
+        let newErrors: any = {};
+        if (!form.title.trim()) newErrors.title = 'Le titre est obligatoire';
+        if (!form.price.trim()) newErrors.price = 'Le prix est obligatoire';
+        if (!form.category) newErrors.category = 'Choisissez une catégorie';
+        if (images.length === 0) newErrors.images = 'Ajoutez au moins une photo';
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const uploadImages = async (imagesToUpload: string[], userId: string) => {
         const uploadedUrls: string[] = [];
         for (const [index, uri] of imagesToUpload.entries()) {
-            if (onProgress) onProgress(Math.round((index / imagesToUpload.length) * 100));
-            // read file as base64
             const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
             const fileName = `${userId}-${Date.now()}-${index}.jpg`;
             const { error: uploadError } = await supabase.storage.from('product').upload(fileName, decode(base64), { contentType: 'image/jpeg' });
             if (uploadError) throw uploadError;
             const { data } = supabase.storage.from('product').getPublicUrl(fileName);
             uploadedUrls.push(data.publicUrl);
-            if (onProgress) onProgress(Math.round(((index + 1) / imagesToUpload.length) * 100));
         }
         return uploadedUrls;
     };
 
     const handleSubmit = async () => {
         Keyboard.dismiss();
-        validateForm();
-        if (!isFormValid || !user?.id) return;
+        if (!validateForm() || !user?.id) return;
+
         setLoading(true);
         try {
-            // Small UX: confirm summary before uploading (quick check)
-            const mainPreview = images[0] || '';
-            // Upload
-            let lastProgress = 0;
-            const uploadedUrls = await uploadImages(images, user.id, (p) => {
-                // only update if enough changed
-                if (p - lastProgress >= 10) {
-                    lastProgress = p;
-                    // you could show a toast or set to state to render progress (omitted for brevity)
-                }
-            });
+            const uploadedUrls = await uploadImages(images, user.id);
             const mainImage = uploadedUrls[0];
             const otherImages = uploadedUrls.slice(1);
+
             const { data: product, error: productError } = await supabase
                 .from('product')
                 .insert({
@@ -294,101 +369,150 @@ export default function SellScreen() {
                 })
                 .select()
                 .single();
+
             if (productError) throw productError;
+
             if (otherImages.length > 0) {
-                const { error: imgError } = await supabase.from('product_images')
+                await supabase.from('product_images')
                     .insert(otherImages.map(url => ({ product_id: product.id, image_url: url })));
-                if (imgError) throw imgError;
             }
-            // success -> navigate to product
-            // small UX: reset form quickly so user doesn't see stale data if they navigate back
-            setForm({ title: '', price: '', description: '', whatsappNumber: '', category: '' });
-            setImages([]);
-            router.replace(`/product/${product.id}`);
+
+            Alert.alert('🎉 Succès !', 'Votre article est maintenant en ligne', [
+                { text: 'OK', onPress: () => router.replace(`/product/${product.id}`) }
+            ]);
         } catch (err: any) {
-            console.error(err);
-            setErrors({ submit: err.message || 'Erreur lors de la publication.' });
-        } finally { setLoading(false); }
+            Alert.alert('Erreur', err.message || 'Impossible de publier l\'article');
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (!user) return <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />;
 
-    const displayName = profile?.display_name || user.user_metadata?.display_name || user.user_metadata?.full_name || user.user_metadata?.displayName || (user.email ? user.email.split('@')[0] : 'utilisateur');
+    const displayName = profile?.display_name || user.user_metadata?.display_name || user.user_metadata?.full_name || (user.email ? user.email.split('@')[0] : 'utilisateur');
     const avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url || null;
+    const isFormValid = images.length > 0 && form.category && form.title && form.price;
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <StatusBar backgroundColor="#FFFDF8" barStyle="dark-content" />
+            <StatusBar backgroundColor="#FAFAFA" barStyle="dark-content" />
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                    <TopHeader displayName={displayName} avatarUrl={avatarUrl} />
-                    <View style={styles.card}>
-                        <Text style={styles.sectionTitle}>✨ Vendre un article</Text>
-                        <Text style={styles.sectionSubtitle}>Quelques étapes simples pour publier rapidement.</Text>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    <ModernHeader displayName={displayName} avatarUrl={avatarUrl} />
 
+                    <ProgressBar progress={calculateProgress()} />
+
+                    <View style={styles.card}>
                         <ImagePickerField images={images} setImages={setImages} error={errors.images} />
 
-                        <FormField label="Titre" error={errors.title}>
-                            <TextInput
-                                style={[styles.input, errors.title && styles.inputError]}
-                                placeholder="Ex : Sac en cuir presque neuf"
-                                value={form.title}
-                                onChangeText={t => handleInputChange('title', t)}
-                            />
-                        </FormField>
+                        <View style={styles.divider} />
 
-                        <CategorySelector categories={categories} selectedCategory={form.category} onSelect={cat => handleInputChange('category', cat)} error={errors.category} />
+                        <CategorySelector
+                            categories={categories}
+                            selectedCategory={form.category}
+                            onSelect={cat => handleInputChange('category', cat)}
+                            error={errors.category}
+                        />
 
-                        <FormField label="Prix (FCFA)" error={errors.price}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Text style={styles.currency}>FCFA</Text>
-                                <TextInput
-                                    style={[styles.input, { flex: 1 }, errors.price && styles.inputError]}
-                                    placeholder="5 000"
-                                    keyboardType="numeric"
-                                    value={prettyPrice(form.price)}
-                                    onChangeText={p => handleInputChange('price', p)}
-                                />
+                        <View style={styles.divider} />
+
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                                <View style={[styles.stepBadge, { backgroundColor: '#10b981' }]}>
+                                    <Text style={styles.stepBadgeText}>3</Text>
+                                </View>
+                                <Text style={styles.sectionTitle}>Détails</Text>
                             </View>
-                        </FormField>
 
-                        <FormField label="Description" isOptional>
-                            <TextInput
-                                style={[styles.input, { height: 120, textAlignVertical: 'top', paddingTop: 14 }]}
-                                placeholder="Décrivez votre article: état, taille, défauts éventuels..."
-                                multiline
-                                maxLength={800}
-                                value={form.description}
-                                onChangeText={t => handleInputChange('description', t)}
-                            />
-                            <Text style={styles.helperText}>{descCount}/800</Text>
-                        </FormField>
-
-                        <FormField label="Numéro WhatsApp" isOptional>
-                            <View style={styles.phoneContainer}>
-                                <Text style={styles.prefix}>+221</Text>
+                            <ModernFormField label="Titre" required error={errors.title} helper="Soyez précis et descriptif">
                                 <TextInput
-                                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                                    placeholder="77 123 45 67"
-                                    keyboardType="phone-pad"
-                                    maxLength={9}
-                                    value={form.whatsappNumber}
-                                    onChangeText={t => handleInputChange('whatsappNumber', t)}
+                                    style={styles.input}
+                                    placeholder="Ex: Sac en cuir marron, état neuf"
+                                    placeholderTextColor="#9ca3af"
+                                    value={form.title}
+                                    onChangeText={t => handleInputChange('title', t)}
                                 />
+                            </ModernFormField>
+
+                            <ModernFormField label="Prix (FCFA)" required error={errors.price}>
+                                <View style={styles.priceInput}>
+                                    <TextInput
+                                        style={[styles.input, { flex: 1 }]}
+                                        placeholder="5 000"
+                                        placeholderTextColor="#9ca3af"
+                                        keyboardType="numeric"
+                                        value={prettyPrice(form.price)}
+                                        onChangeText={p => handleInputChange('price', p)}
+                                    />
+                                    <Text style={styles.priceCurrency}>FCFA</Text>
+                                </View>
+                            </ModernFormField>
+
+                            <ModernFormField label="Description" helper="État, taille, défauts éventuels...">
+                                <TextInput
+                                    style={[styles.input, styles.textArea]}
+                                    placeholder="Décrivez votre article en détail..."
+                                    placeholderTextColor="#9ca3af"
+                                    multiline
+                                    maxLength={800}
+                                    value={form.description}
+                                    onChangeText={t => handleInputChange('description', t)}
+                                />
+                                <Text style={styles.charCount}>{form.description.length}/800</Text>
+                            </ModernFormField>
+                        </View>
+
+                        <View style={styles.divider} />
+
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                                <View style={[styles.stepBadge, { backgroundColor: '#f59e0b' }]}>
+                                    <Text style={styles.stepBadgeText}>4</Text>
+                                </View>
+                                <Text style={styles.sectionTitle}>Contact</Text>
                             </View>
-                        </FormField>
 
-                        {errors.submit && <Text style={[styles.errorText, { textAlign: 'center', marginTop: 16 }]}>{errors.submit}</Text>}
+                            <ModernFormField label="Numéro WhatsApp" helper="Pour que les acheteurs vous contactent">
+                                <View style={styles.phoneInput}>
+                                    <Text style={styles.phonePrefix}>+221</Text>
+                                    <TextInput
+                                        style={[styles.input, { flex: 1 }]}
+                                        placeholder="77 123 45 67"
+                                        placeholderTextColor="#9ca3af"
+                                        keyboardType="phone-pad"
+                                        maxLength={9}
+                                        value={form.whatsappNumber}
+                                        onChangeText={t => handleInputChange('whatsappNumber', t)}
+                                    />
+                                </View>
+                            </ModernFormField>
+                        </View>
 
-                        <TouchableOpacity style={[styles.submit, (!isFormValid || loading) && styles.submitDisabled]} onPress={handleSubmit} disabled={!isFormValid || loading}>
-                            {loading ? <ActivityIndicator color="#1C2B49" /> : <Text style={styles.submitText}>Mettre en vente</Text>}
+                        <TouchableOpacity
+                            style={[styles.submitBtn, (!isFormValid || loading) && styles.submitBtnDisabled]}
+                            onPress={handleSubmit}
+                            disabled={!isFormValid || loading}
+                            activeOpacity={0.8}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#1f2937" size="small" />
+                            ) : (
+                                <>
+                                    <Text style={styles.submitBtnText}>Publier l'article</Text>
+                                    <Ionicons name="arrow-forward" size={20} color="#1f2937" />
+                                </>
+                            )}
                         </TouchableOpacity>
 
                         <View style={styles.tips}>
-                            <Text style={styles.tipTitle}>Conseils rapides</Text>
-                            <Text style={styles.tipItem}>• 3 photos minimum: face, détail, défaut si présent</Text>
-                            <Text style={styles.tipItem}>• Prix réaliste = vente plus rapide</Text>
-                            <Text style={styles.tipItem}>• Soyez honnête sur l'état</Text>
+                            <Text style={styles.tipsTitle}>💡 Conseils pour vendre vite</Text>
+                            <Text style={styles.tipItem}>• Photos nettes avec bonne lumière</Text>
+                            <Text style={styles.tipItem}>• Prix réaliste = vente 3x plus rapide</Text>
+                            <Text style={styles.tipItem}>• Mentionnez tous les défauts</Text>
                         </View>
                     </View>
                 </ScrollView>
@@ -397,58 +521,413 @@ export default function SellScreen() {
     );
 }
 
-// Styles améliorés pour une meilleure apparence
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: '#FFFDF8' },
-    scrollContent: { padding: 20, paddingBottom: 120 },
-    headerContainer: { marginBottom: 16, backgroundColor: '#FFF', padding: 16, borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-    headerInner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    greeting: { color: '#6B7280', fontSize: 14 },
-    displayName: { fontSize: 20, fontWeight: '700', color: '#0f1724' },
-    headerRight: { marginLeft: 12 },
-    avatar: { width: 50, height: 50, borderRadius: 12 },
-    avatarPlaceholder: { width: 50, height: 50, borderRadius: 12, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
-    avatarInitials: { color: '#1C2B49', fontWeight: '700' },
-    headerSubtitle: { marginTop: 8, color: '#6B7280', fontSize: 13 },
+    // --- Conteneurs principaux ---
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#FAFAFA'
+    },
+    scrollContent: {
+        padding: 16,
+        paddingBottom: 100
+    },
+    card: {
+        backgroundColor: '#fff',
+        padding: 20,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2
+    },
 
-    card: { backgroundColor: '#FFF', padding: 16, borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+    // --- Header ---
+    modernHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        padding: 20,
+        borderRadius: 20,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    headerGreeting: {
+        fontSize: 14,
+        color: '#6b7280',
+        marginBottom: 4
+    },
+    headerName: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#111827',
+        marginBottom: 4
+    },
+    headerSubtitle: {
+        fontSize: 13,
+        color: '#9ca3af'
+    },
+    headerAvatar: {
+        width: 56,
+        height: 56,
+        borderRadius: 16,
+        borderWidth: 3,
+        borderColor: '#f59e0b'
+    },
+    headerAvatarPlaceholder: {
+        width: 56,
+        height: 56,
+        borderRadius: 16,
+        backgroundColor: '#fef3c7',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerAvatarText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#f59e0b'
+    },
 
-    sectionTitle: { fontSize: 20, fontWeight: '700', color: '#1C2B49' },
-    sectionSubtitle: { fontSize: 13, color: '#6B7280', marginTop: 6, marginBottom: 12 },
+    // --- Barre de progression ---
+    progressContainer: {
+        marginBottom: 16,
+        backgroundColor: '#fff',
+        padding: 16,
+        borderRadius: 16
+    },
+    progressInfo: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 8
+    },
+    progressText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6b7280'
+    },
+    progressPercent: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#f59e0b'
+    },
+    progressBarBg: {
+        height: 8,
+        backgroundColor: '#f3f4f6',
+        borderRadius: 8,
+        overflow: 'hidden'
+    },
+    progressBarFill: {
+        height: '100%',
+        backgroundColor: '#f59e0b',
+        borderRadius: 8
+    },
 
-    sectionContainer: { marginBottom: 18 },
-    label: { fontSize: 15, fontWeight: '600', color: '#1F2937', marginBottom: 8 },
-    required: { color: '#EF4444' },
-    helperText: { fontSize: 13, color: '#6B7280', marginBottom: 12, marginTop: -4 },
-    input: { backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 16, height: 52, fontSize: 16, borderColor: '#E5E7EB', borderWidth: 1 },
-    inputError: { borderColor: '#EF4444' },
-    errorText: { color: '#EF4444', fontSize: 13, marginTop: 6 },
-    imageScroller: { paddingVertical: 4 },
-    addImage: { width: 100, height: 100, borderRadius: 12, backgroundColor: '#F9FAFB', borderWidth: 1, borderStyle: 'dashed', borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' },
-    addText: { fontSize: 13, color: '#6B7280', marginTop: 6, fontWeight: '500' },
-    imageContainer: { position: 'relative', marginRight: 12 },
-    image: { width: 100, height: 100, borderRadius: 12 },
-    coverImage: { borderWidth: 2, borderColor: '#F59E0B' },
-    removeBtn: { position: 'absolute', top: -8, right: -8, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 15, padding: 2 },
-    coverBtn: { position: 'absolute', bottom: -8, left: 0, right: 0, alignItems: 'center', paddingVertical: 4, backgroundColor: 'rgba(0,0,0,0.04)', borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
-    coverBtnText: { fontSize: 12, color: '#374151', fontWeight: '600' },
-    coverBadge: { position: 'absolute', top: 6, left: 6, backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-    coverBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+    // --- Structure des sections ---
+    section: {
+        marginBottom: 24
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+        gap: 12
+    },
+    stepBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#3b82f6',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    stepBadgeText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '800'
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111827'
+    },
+    sectionSubtitle: {
+        fontSize: 13,
+        color: '#6b7280',
+        marginBottom: 16
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#f3f4f6',
+        marginVertical: 24
+    },
 
-    categoryCard: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#F9FAFB', borderColor: '#E5E7EB', borderWidth: 1, marginRight: 10, flexDirection: 'row', alignItems: 'center' as const },
-    categorySelected: { backgroundColor: '#FFFBEB', borderColor: '#F6C445', borderWidth: 1.5 },
-    categoryIcon: { fontSize: 20 },
-    categoryText: { fontWeight: '600', color: '#1F2937', marginLeft: 8 },
+    // --- Sélecteur de Photos ---
+    imageScroll: {
+        marginBottom: 12
+    },
+    imageWrapper: {
+        width: 120,
+        height: 120,
+        borderRadius: 16,
+        marginRight: 12,
+        position: 'relative',
+        overflow: 'hidden', // Pour s'assurer que les enfants respectent le borderRadius
+    },
+    imagePreview: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 16
+    },
+    coverBadge: {
+        position: 'absolute',
+        top: 8,
+        left: 8,
+        backgroundColor: '#f59e0b',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    coverBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '700'
+    },
+    imageNumber: {
+        position: 'absolute',
+        bottom: 8,
+        right: 8,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    imageNumberText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '700'
+    },
+    imageActions: { // Note: l'opacité à 0 suggère une interaction pour le faire apparaître
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+        opacity: 0, // Mettre à 1 pour le voir, ou gérer via un état au "press"
+    },
+    setCoverBtn: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    setCoverText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#111827'
+    },
+    removeImageBtn: {
+        backgroundColor: '#ef4444',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    addImageBtn: {
+        width: 120,
+        height: 120,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderStyle: 'dashed',
+        borderColor: '#f59e0b',
+        backgroundColor: '#fffbeb',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    addImageIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#fff',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    addImageText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#92400e'
+    },
+    helperText: {
+        fontSize: 12,
+        color: '#6b7280',
+        marginTop: 8,
+        textAlign: 'center',
+    },
 
-    phoneContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    prefix: { fontWeight: '600', color: '#1C2B49', fontSize: 16 },
-    submit: { backgroundColor: '#F6C445', borderRadius: 12, justifyContent: 'center', alignItems: 'center', height: 52, marginTop: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-    submitDisabled: { backgroundColor: '#FDE68A', opacity: 0.9 },
-    submitText: { fontWeight: 'bold', color: '#1C2B49', fontSize: 16 },
+    // --- Sélecteur de Catégorie ---
+    categoryGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10
+    },
+    categoryCard: {
+        width: '48%', // Un peu moins de 50% pour gérer le gap
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: '#e5e7eb',
+        backgroundColor: '#fafafa',
+        alignItems: 'center',
+        gap: 8,
+    },
+    categoryCardSelected: {
+        backgroundColor: '#fffbeb',
+        borderWidth: 2,
+    },
+    categoryIcon: {
+        fontSize: 32
+    },
+    categoryLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6b7280',
+        textAlign: 'center'
+    },
+    categoryLabelSelected: {
+        color: '#111827'
+    },
+    categoryCheck: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
 
-    currency: { fontWeight: '700', color: '#1C2B49' },
+    // --- Champs de formulaire ---
+    formField: {
+        marginBottom: 20
+    },
+    fieldLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#111827',
+        marginBottom: 8
+    },
+    required: {
+        color: '#ef4444'
+    },
+    fieldHelper: {
+        fontSize: 12,
+        color: '#6b7280',
+        marginBottom: 8
+    },
+    input: {
+        backgroundColor: '#fafafa',
+        borderWidth: 2,
+        borderColor: '#e5e7eb',
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        fontSize: 15,
+        color: '#111827',
+    },
+    textArea: {
+        height: 120,
+        textAlignVertical: 'top',
+        paddingTop: 14
+    },
+    charCount: {
+        fontSize: 11,
+        color: '#9ca3af',
+        textAlign: 'right',
+        marginTop: 4
+    },
+    priceInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12
+    },
+    priceCurrency: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#6b7280'
+    },
+    phoneInput: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fafafa',
+        borderWidth: 2,
+        borderColor: '#e5e7eb',
+        borderRadius: 12,
+    },
+    phonePrefix: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#6b7280',
+        paddingLeft: 16,
+    },
 
-    tips: { marginTop: 18, backgroundColor: '#F8FAFF', padding: 12, borderRadius: 12 },
-    tipTitle: { fontWeight: '700', color: '#0F1724', marginBottom: 6 },
-    tipItem: { color: '#374151', fontSize: 13, marginBottom: 4 },
+    // --- Bouton de soumission ---
+    submitBtn: {
+        backgroundColor: '#f59e0b',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 18,
+        borderRadius: 16,
+        marginTop: 24,
+        gap: 8,
+    },
+    submitBtnDisabled: {
+        backgroundColor: '#f3f4f6',
+        opacity: 0.8,
+    },
+    submitBtnText: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#1f2937',
+    },
+
+    // --- Section Conseils ---
+    tips: {
+        marginTop: 32,
+        padding: 16,
+        backgroundColor: '#f0f9ff', // Un bleu très clair pour se démarquer
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#e0f2fe',
+    },
+    tipsTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#0369a1',
+        marginBottom: 8,
+    },
+    tipItem: {
+        fontSize: 13,
+        color: '#075985',
+        lineHeight: 20,
+    },
+
+    // --- Message d'erreur ---
+    errorText: {
+        color: '#ef4444',
+        fontSize: 12,
+        marginTop: 6,
+        fontWeight: '500',
+    },
 });

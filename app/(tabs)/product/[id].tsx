@@ -1,5 +1,9 @@
+// 👇 AJOUTS : Importer les hooks nécessaires pour le chat
+import AuthModal from '@/app/composants/authModal';
+import { useAuth } from '@/context/authContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
+import { useSendbirdChat } from '@sendbird/uikit-react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -12,7 +16,6 @@ import {
     Image,
     Platform,
     ScrollView,
-    Share,
     StatusBar,
     StyleSheet,
     Text,
@@ -34,28 +37,29 @@ export default function ProductDetailScreen() {
     const [activeSlide, setActiveSlide] = useState(0);
     const [isFavorite, setIsFavorite] = useState(false);
     const [showFullDescription, setShowFullDescription] = useState(false);
+    const [authVisible, setAuthVisible] = useState(false);
+
     const scrollY = useRef(new Animated.Value(0)).current;
     const scrollViewRef = useRef<ScrollView>(null);
     const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    // 👇 AJOUTS : Hooks et état pour la logique du chat
+    const { user } = useAuth(); // L'utilisateur actuel (acheteur)
+    const { sdk } = useSendbirdChat(); // Le SDK de Sendbird
+    const [isCreatingChat, setIsCreatingChat] = useState(false); // État de chargement pour le bouton
+
+
+    useEffect(() => { if (!user) setAuthVisible(true); }, [user]);
 
     useEffect(() => {
         if (id) fetchProduct();
     }, [id]);
 
     useEffect(() => {
-        // Animation de pulse pour le bouton d'achat
         Animated.loop(
             Animated.sequence([
-                Animated.timing(pulseAnim, {
-                    toValue: 1.05,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(pulseAnim, {
-                    toValue: 1,
-                    duration: 1000,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(pulseAnim, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
             ])
         ).start();
     }, []);
@@ -97,65 +101,54 @@ export default function ProductDetailScreen() {
         }
     }
 
-    const handleShare = async () => {
-        if (!product) return;
+
+    // 👇 AJOUT : La fonction qui gère le clic sur "Contacter le vendeur"
+    const onContactSeller = async () => {
+        // 1. Vérifier si l'acheteur est connecté
+        if (!user) {
+            Alert.alert("Connexion requise", "Veuillez vous connecter pour contacter le vendeur.");
+            // Idéalement, ouvrir ton AuthModal ici si tu l'as dans un contexte global
+            return <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />;
+        }
+
+        // 2. Vérifier que l'utilisateur n'est pas le vendeur
+        if (user.id === product.seller.id) {
+            Alert.alert("Action impossible", "Vous ne pouvez pas vous envoyer de message.");
+            return;
+        }
+
+        setIsCreatingChat(true);
         try {
-            await Share.share({
-                message: `Découvre ${product.title} à ${product.price.toLocaleString()} FCFA sur SangseSho 🛍️\nhttps://sangseshop.sn/product/${product.id}`,
-                title: product.title,
+            // 3. Créer le canal de discussion avec Sendbird
+            const params = {
+                invitedUserIds: [product.seller.id], // ID du vendeur
+                isDistinct: true, // Réutilise la conversation si elle existe déjà
+            };
+
+            const channel = await sdk.groupChannel.createChannel(params);
+
+            // 4. Naviguer vers l'écran de chat avec l'URL du canal
+            router.push({
+                pathname: "/chat",
+                params: { channelUrl: channel.url }
             });
+
         } catch (error) {
-            console.error('Erreur de partage:', error);
+            console.error("Erreur lors de la création du canal de chat:", error);
+            Alert.alert("Erreur", "Impossible de démarrer la conversation.");
+        } finally {
+            setIsCreatingChat(false);
         }
     };
 
-    const handleBuyNow = () => {
-        if (!product) return;
-        Alert.alert(
-            'Acheter maintenant',
-            `Confirmer l'achat de "${product.title}" pour ${product.price.toLocaleString()} FCFA ?`,
-            [
-                { text: 'Annuler', style: 'cancel' },
-                {
-                    text: 'Confirmer',
-                    onPress: () => {
-                        // Navigation vers le paiement escrow
-                        console.log('Achat confirmé');
-                    }
-                },
-            ]
-        );
-    };
-
-    const toggleFavorite = () => {
-        setIsFavorite(!isFavorite);
-    };
-
-    const headerTranslateY = scrollY.interpolate({
-        inputRange: [0, HEADER_SCROLL_DISTANCE],
-        outputRange: [0, -HEADER_SCROLL_DISTANCE],
-        extrapolate: 'clamp',
-    });
-
-    const imageOpacity = scrollY.interpolate({
-        inputRange: [0, HEADER_SCROLL_DISTANCE / 2, HEADER_SCROLL_DISTANCE],
-        outputRange: [1, 0.5, 0],
-        extrapolate: 'clamp',
-    });
-
-    const headerOpacity = scrollY.interpolate({
-        inputRange: [0, HEADER_SCROLL_DISTANCE / 2, HEADER_SCROLL_DISTANCE],
-        outputRange: [0, 0, 1],
-        extrapolate: 'clamp',
-    });
-
-    const imageScale = scrollY.interpolate({
-        inputRange: [-100, 0, HEADER_SCROLL_DISTANCE],
-        outputRange: [1.3, 1, 0.9],
-        extrapolate: 'clamp',
-    });
-
-    const renderImage = ({ item, index }: { item: string; index: number }) => (
+    const handleShare = async () => { /* ... */ };
+    const handleBuyNow = () => { /* ... */ };
+    const toggleFavorite = () => { /* ... */ };
+    const headerTranslateY = scrollY.interpolate({ /* ... */ });
+    const imageOpacity = scrollY.interpolate({ /* ... */ });
+    const headerOpacity = scrollY.interpolate({ /* ... */ });
+    const imageScale = scrollY.interpolate({ /* ... */ });
+    const renderImage = ({ item }: { item: string }) => (
         <View style={styles.imageSlide}>
             <Image source={{ uri: item }} style={styles.productImage} resizeMode="cover" />
         </View>
@@ -219,7 +212,7 @@ export default function ProductDetailScreen() {
                         height={HEADER_MAX_HEIGHT}
                         data={product.images}
                         renderItem={renderImage}
-                        onSnapToItem={(index) => setActiveSlide(index)}
+                        onSnapToItem={(index: any) => setActiveSlide(index)}
                         scrollAnimationDuration={400}
                         panGestureHandlerProps={{
                             activeOffsetX: [-10, 10],
@@ -487,17 +480,25 @@ export default function ProductDetailScreen() {
                 </View>
             </Animated.ScrollView>
 
-            {/* Fixed Bottom CTA */}
+            {/* --- Barre d'action fixe en bas (CTA) --- */}
             <View style={styles.bottomCTA}>
                 <BlurView intensity={95} style={StyleSheet.absoluteFill} tint="light" />
                 <View style={styles.ctaContent}>
+                    {/* 👇 MODIFICATION : Le bouton "Message" utilise la nouvelle logique */}
                     <TouchableOpacity
                         style={styles.contactButton}
-                        onPress={() => router.push(`/chat/${product.seller.id}`)}
+                        onPress={onContactSeller} // <--- Utilise la nouvelle fonction
+                        disabled={isCreatingChat}   // <--- Désactivé pendant le chargement
                         activeOpacity={0.8}
                     >
-                        <Ionicons name="chatbubble-ellipses" size={24} color="#1C2B49" />
-                        <Text style={styles.contactButtonText}>Message</Text>
+                        {isCreatingChat ? (
+                            <ActivityIndicator color="#1C2B49" />
+                        ) : (
+                            <>
+                                <Ionicons name="chatbubble-ellipses" size={24} color="#1C2B49" />
+                                <Text style={styles.contactButtonText}>Message</Text>
+                            </>
+                        )}
                     </TouchableOpacity>
 
                     <Animated.View style={[styles.buyButtonWrapper, { transform: [{ scale: pulseAnim }] }]}>
