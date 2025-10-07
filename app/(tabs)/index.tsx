@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -18,15 +19,23 @@ import ProductCard from '../composants/productCard';
 
 interface Product {
   id: string;
-  name: string;
-  title: string;
+  name?: string;
+  title?: string;
   description?: string;
-  price: number;
+  price?: number;
   image?: string;
   image_url?: string;
   category?: string;
-  created_at: string;
+  latitude?: number;
+  longitude?: number;
+  created_at?: string;
   product_like?: { count: number }[];
+  distance?: number;
+}
+
+interface UserLocation {
+  latitude: number;
+  longitude: number;
 }
 
 const PRICE_RANGES = [
@@ -37,15 +46,39 @@ const PRICE_RANGES = [
   { id: 'premium', label: '> 100k', min: 100000, max: Infinity },
 ];
 
+const DISTANCE_RANGES = [
+  { id: 'all', label: 'Partout', max: Infinity },
+  { id: 'nearby', label: '< 5 km', max: 5 },
+  { id: 'local', label: '< 10 km', max: 10 },
+  { id: 'area', label: '< 25 km', max: 25 },
+  { id: 'far', label: '< 50 km', max: 50 },
+];
+
 const CATEGORIES = [
-  { id: 'all', name: 'Tout', icon: 'apps' },
-  { id: 'Mode', name: 'Mode', icon: 'shirt' },
-  { id: 'Électronique', name: 'Tech', icon: 'phone-portrait' },
-  { id: 'Maison', name: 'Maison', icon: 'home' },
-  { id: 'Sport', name: 'Sport', icon: 'football' },
+  { id: 'all', name: 'Tout', icon: '🗂' },
+  { id: 'vetement', name: 'Vêtements', icon: '👗' },
+  { id: 'soins_et_astuces', name: 'Soins & Astuces', icon: '💄' },
+  { id: 'maquillage', name: 'Maquillage', icon: '💋' },
+  { id: 'artisanat', name: 'Artisanat', icon: '🎨' },
+  { id: 'electronique', name: 'Électronique', icon: '📱' },
+  { id: 'accessoire', name: 'Accessoires', icon: '👜' },
+  { id: 'chaussure', name: 'Chaussures', icon: '👠' },
 ];
 
 const ITEMS_PER_PAGE = 10;
+
+// Calcul de la distance entre deux points (formule de Haversine)
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Rayon de la Terre en km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 export default function ProductsScreen() {
   const router = useRouter();
@@ -55,13 +88,47 @@ export default function ProductsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedPriceRange, setSelectedPriceRange] = useState('all');
+  const [selectedDistance, setSelectedDistance] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
-  const scrollY = new Animated.Value(0);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | 'pending'>('pending');
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    fetchProducts();
+    requestLocationPermission();
   }, []);
+
+  useEffect(() => {
+    if (userLocation) {
+      fetchProducts();
+    }
+  }, [userLocation]);
+
+  const requestLocationPermission = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status === 'granted') {
+        setLocationPermission('granted');
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setUserLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        });
+      } else {
+        setLocationPermission('denied');
+        // Charger les produits sans géolocalisation
+        fetchProducts();
+      }
+    } catch (error) {
+      console.error('Erreur localisation:', error);
+      setLocationPermission('denied');
+      fetchProducts();
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -74,7 +141,27 @@ export default function ProductsScreen() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setProducts(data || []);
+
+      // Calculer la distance pour chaque produit
+      const productsWithDistance = (data || []).map(product => {
+        if (userLocation && product.latitude && product.longitude) {
+          const distance = calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            product.latitude,
+            product.longitude
+          );
+          return { ...product, distance };
+        }
+        return { ...product, distance: Infinity };
+      });
+
+      // Trier par distance si géolocalisation disponible
+      if (userLocation) {
+        productsWithDistance.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
+      }
+
+      setProducts(productsWithDistance);
     } catch (error) {
       console.error('Erreur:', error);
     } finally {
@@ -90,20 +177,27 @@ export default function ProductsScreen() {
   };
 
   const filteredProducts = products.filter((product) => {
+    const q = searchQuery?.trim().toLowerCase() || '';
     const matchesSearch =
-      !searchQuery ||
-      product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      (product.name && product.name.toLowerCase().includes(q)) ||
+      (product.title && product.title.toLowerCase().includes(q)) ||
+      (product.description && product.description.toLowerCase().includes(q));
 
     const matchesCategory =
-      selectedCategory === 'all' || product.category === selectedCategory;
+      selectedCategory === 'all' || (product.category === selectedCategory);
 
     const priceRange = PRICE_RANGES.find((r) => r.id === selectedPriceRange);
+    const price = typeof product.price === 'number' ? product.price : NaN;
     const matchesPrice =
-      !priceRange || (product.price >= priceRange.min && product.price <= priceRange.max);
+      !priceRange || (Number.isFinite(price) && price >= priceRange.min && price <= priceRange.max) || priceRange.id === 'all';
 
-    return matchesSearch && matchesCategory && matchesPrice;
+    const distanceRange = DISTANCE_RANGES.find((r) => r.id === selectedDistance);
+    const matchesDistance =
+      selectedDistance === 'all' ||
+      (product.distance !== undefined && product.distance <= (distanceRange?.max || Infinity));
+
+    return matchesSearch && matchesCategory && matchesPrice && matchesDistance;
   });
 
   const displayedProducts = filteredProducts.slice(0, visibleCount);
@@ -113,14 +207,16 @@ export default function ProductsScreen() {
     setSearchQuery('');
     setSelectedCategory('all');
     setSelectedPriceRange('all');
+    setSelectedDistance('all');
     setShowFilters(false);
+    setVisibleCount(ITEMS_PER_PAGE);
   };
 
   const loadMore = () => {
     setVisibleCount((prev) => Math.min(prev + ITEMS_PER_PAGE, filteredProducts.length));
   };
 
-  const hasActiveFilters = selectedCategory !== 'all' || selectedPriceRange !== 'all' || searchQuery;
+  const hasActiveFilters = selectedCategory !== 'all' || selectedPriceRange !== 'all' || selectedDistance !== 'all' || !!searchQuery;
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, 50],
@@ -128,13 +224,21 @@ export default function ProductsScreen() {
     extrapolate: 'clamp',
   });
 
+  const retryLocation = () => {
+    setLocationPermission('pending');
+    setLoading(true);
+    requestLocationPermission();
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <View style={styles.loaderCircle}>
           <ActivityIndicator size="large" color="#F6C445" />
         </View>
-        <Text style={styles.loadingText}>Chargement...</Text>
+        <Text style={styles.loadingText}>
+          {locationPermission === 'pending' ? 'Localisation en cours...' : 'Chargement...'}
+        </Text>
       </View>
     );
   }
@@ -151,6 +255,16 @@ export default function ProductsScreen() {
             <View style={styles.logoDot} />
           </View>
           <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.locationButton}
+              onPress={retryLocation}
+            >
+              <Ionicons
+                name={locationPermission === 'granted' ? 'location' : 'location-outline'}
+                size={20}
+                color={locationPermission === 'granted' ? '#10B981' : '#EF4444'}
+              />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton}>
               <Ionicons name="notifications-outline" size={24} color="#1F2937" />
               <View style={styles.notificationBadge}>
@@ -159,6 +273,25 @@ export default function ProductsScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {locationPermission === 'granted' && userLocation && (
+          <View style={styles.locationBanner}>
+            <Ionicons name="navigate" size={16} color="#10B981" />
+            <Text style={styles.locationText}>
+              Produits recommandés près de vous
+            </Text>
+          </View>
+        )}
+
+        {locationPermission === 'denied' && (
+          <TouchableOpacity style={styles.locationDeniedBanner} onPress={retryLocation}>
+            <Ionicons name="location-outline" size={16} color="#EF4444" />
+            <Text style={styles.locationDeniedText}>
+              Activer la localisation pour voir les produits à proximité
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color="#EF4444" />
+          </TouchableOpacity>
+        )}
 
         <View style={styles.searchWrapper}>
           <View style={styles.searchContainer}>
@@ -192,6 +325,33 @@ export default function ProductsScreen() {
 
       {showFilters && (
         <View style={styles.filtersPanel}>
+          {locationPermission === 'granted' && (
+            <View style={styles.filterSection}>
+              <Text style={styles.filterTitle}>📍 Distance</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {DISTANCE_RANGES.map((range) => (
+                  <TouchableOpacity
+                    key={range.id}
+                    style={[
+                      styles.filterChip,
+                      selectedDistance === range.id && styles.filterChipActive,
+                    ]}
+                    onPress={() => setSelectedDistance(range.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selectedDistance === range.id && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {range.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           <View style={styles.filterSection}>
             <Text style={styles.filterTitle}>Catégories</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -204,11 +364,9 @@ export default function ProductsScreen() {
                   ]}
                   onPress={() => setSelectedCategory(category.id)}
                 >
-                  <Ionicons
-                    name={category.icon as any}
-                    size={16}
-                    color={selectedCategory === category.id ? '#1C2B49' : '#6B7280'}
-                  />
+                  <Text style={styles.categoryEmoji}>
+                    {category.icon}
+                  </Text>
                   <Text
                     style={[
                       styles.filterChipText,
@@ -250,13 +408,19 @@ export default function ProductsScreen() {
           {hasActiveFilters && (
             <TouchableOpacity style={styles.clearButton} onPress={clearFilters}>
               <Ionicons name="close-circle" size={16} color="#EF4444" />
-              <Text style={styles.clearButtonText}>Effacer</Text>
+              <Text style={styles.clearButtonText}>Effacer les filtres</Text>
             </TouchableOpacity>
           )}
         </View>
       )}
     </>
   );
+
+  const formatDistance = (distance?: number) => {
+    if (distance === undefined || distance === Infinity) return null;
+    if (distance < 1) return `${Math.round(distance * 1000)}m`;
+    return `${distance.toFixed(1)}km`;
+  };
 
   return (
     <View style={styles.container}>
@@ -267,9 +431,15 @@ export default function ProductsScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => (
           <View style={styles.productWrapper}>
-            {index < 3 && !hasActiveFilters && (
+            {index < 3 && !hasActiveFilters && locationPermission === 'granted' && (
               <View style={styles.topBadge}>
                 <Ionicons name="star" size={10} color="#FFF" />
+              </View>
+            )}
+            {item.distance !== undefined && item.distance !== Infinity && (
+              <View style={styles.distanceBadge}>
+                <Ionicons name="location" size={10} color="#10B981" />
+                <Text style={styles.distanceText}>{formatDistance(item.distance)}</Text>
               </View>
             )}
             <ProductCard
@@ -289,12 +459,12 @@ export default function ProductsScreen() {
             <Text style={styles.emptyTitle}>Aucun résultat</Text>
             <Text style={styles.emptyText}>
               {hasActiveFilters
-                ? 'Modifiez vos filtres'
-                : 'Pas encore de produits'}
+                ? 'Essayez de modifier vos filtres'
+                : 'Aucun produit disponible pour le moment'}
             </Text>
             {hasActiveFilters && (
               <TouchableOpacity style={styles.emptyButton} onPress={clearFilters}>
-                <Text style={styles.emptyButtonText}>Réinitialiser</Text>
+                <Text style={styles.emptyButtonText}>Réinitialiser les filtres</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -331,15 +501,6 @@ export default function ProductsScreen() {
         })}
         scrollEventThrottle={16}
       />
-
-      <TouchableOpacity
-        style={styles.floatingButton}
-        onPress={() => router.push('/')}
-        activeOpacity={0.9}
-      >
-        <Ionicons name="add" size={24} color="#1C2B49" />
-        <Text style={styles.floatingButtonText}>Vendre</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -389,7 +550,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   logoContainer: {
     position: 'relative',
@@ -417,6 +578,12 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     gap: 12,
+    alignItems: 'center',
+  },
+  locationButton: {
+    padding: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
   },
   iconButton: {
     padding: 4,
@@ -439,6 +606,38 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#FFF',
+  },
+  locationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  locationText: {
+    fontSize: 13,
+    color: '#065F46',
+    fontWeight: '600',
+    flex: 1,
+  },
+  locationDeniedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  locationDeniedText: {
+    fontSize: 12,
+    color: '#991B1B',
+    fontWeight: '600',
+    flex: 1,
   },
   searchWrapper: {
     flexDirection: 'row',
@@ -532,6 +731,9 @@ const styles = StyleSheet.create({
     color: '#1C2B49',
     fontWeight: '700',
   },
+  categoryEmoji: {
+    fontSize: 16,
+  },
   clearButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -540,6 +742,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 14,
     gap: 6,
+    marginTop: 4,
   },
   clearButtonText: {
     fontSize: 14,
@@ -572,6 +775,29 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  distanceBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 10,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  distanceText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 80,
@@ -597,6 +823,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginBottom: 24,
+    lineHeight: 20,
   },
   emptyButton: {
     backgroundColor: '#F6C445',
@@ -648,27 +875,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#10B981',
     fontWeight: '600',
-  },
-  floatingButton: {
-    position: 'absolute',
-    bottom: 60,
-    right: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F6C445',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 30,
-    gap: 8,
-    shadowColor: '#F59E0B',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  floatingButtonText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1C2B49',
   },
 });

@@ -1,47 +1,47 @@
-import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Chip } from "react-native-paper";
+import React from 'react';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
-const categories = [
-    { value: "vetement", label: "Vêtement", icon: "👗" },
-    { value: "soins_et_astuces", label: "Soins et astuces", icon: "💄" },
-    { value: "maquillage", label: "Maquillage", icon: "💋" },
-    { value: "artisanat", label: "Artisanat", icon: "🎨" },
-    { value: "electronique", label: "Electronique", icon: "📱" },
-    { value: "accessoire", label: "Accessoire", icon: "👜" },
-    { value: "chaussure", label: "Chaussure", icon: "👠" },
-];
+interface Category {
+    value: string;
+    label: string;
+    icon: string;
+}
 
-type Props = {
-    selected: string | null;
+interface Props {
+    categories: Category[];
+    selectedCategory: string;
     onSelect: (value: string) => void;
-};
+    error?: string;
+}
 
-export default function CategorySelector({ selected, onSelect }: Props) {
+export default function CategorySelector({ categories, selectedCategory, onSelect, error }: Props) {
     return (
-        <View style={styles.container}>
-            {categories.map((cat) => (
-                <Chip
-                    key={cat.value}
-                    selected={selected === cat.value}
-                    onPress={() => onSelect(cat.value)}
-                    style={styles.chip}
-                >
-                    {cat.icon} {cat.label}
-                </Chip>
-            ))}
+        <View style={{ marginBottom: 24 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 8 }}>Catégorie *</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20, paddingHorizontal: 20 }}>
+                {categories.map(cat => (
+                    <TouchableOpacity
+                        key={cat.value}
+                        onPress={() => onSelect(cat.value)}
+                        style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 16,
+                            borderRadius: 12,
+                            backgroundColor: selectedCategory === cat.value ? '#FFFBEB' : '#F9FAFB',
+                            borderColor: selectedCategory === cat.value ? '#F6C445' : '#E5E7EB',
+                            borderWidth: selectedCategory === cat.value ? 1.5 : 1,
+                            marginRight: 10,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 8,
+                        }}
+                    >
+                        <Text style={{ fontSize: 20 }}>{cat.icon}</Text>
+                        <Text style={{ fontWeight: '600', color: '#1F2937' }}>{cat.label}</Text>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+            {error && <Text style={{ color: '#EF4444', fontSize: 13, marginTop: 6 }}>{error}</Text>}
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 8, // pour iOS ça fonctionne mieux avec marginRight/marginBottom
-    },
-    chip: {
-        marginRight: 8,
-        marginBottom: 8,
-    },
-});

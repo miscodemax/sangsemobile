@@ -34,7 +34,6 @@ const CustomTabBarButton = ({ onPress }) => (
   </TouchableOpacity>
 );
 
-// 🧭 Layout principal
 export default function TabLayout() {
   const { user } = useAuth();
   const router = useRouter();
@@ -71,22 +70,29 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 🔍 Explorer */}
+      {/* 🏬 Store dynamique */}
       <Tabs.Screen
-        name="explore"
+        name="store/[id]"
         options={{
-          title: "Explorer",
+          title: "Store",
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? "search" : "search-outline"}
+              name={focused ? "storefront" : "storefront-outline"}
               size={size}
               color={color}
             />
           ),
         }}
         listeners={{
-          tabPress: () =>
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
+          tabPress: (e) => {
+            e.preventDefault();
+            if (!user?.id) {
+              console.log("Utilisateur non connecté");
+            } else {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push(`/store/${user.id}`);
+            }
+          },
         }}
       />
 
@@ -130,7 +136,6 @@ export default function TabLayout() {
       {/* 👤 Profil dynamique */}
       <Tabs.Screen
         name="profile/[id]"
-        initialParams={{ id: user?.id }}
         options={{
           title: "Profil",
           tabBarIcon: ({ color, size, focused }) => (
@@ -144,11 +149,12 @@ export default function TabLayout() {
         }}
         listeners={{
           tabPress: (e) => {
+            e.preventDefault();
             if (!user?.id) {
-              e.preventDefault();
-              // tu peux afficher ton modal d’auth ici
+              console.log("Utilisateur non connecté");
             } else {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push(`/profile/${user.id}`);
             }
           },
         }}
@@ -156,7 +162,9 @@ export default function TabLayout() {
 
       {/* 🔒 Pages cachées */}
       <Tabs.Screen name="product/[id]" options={{ href: null }} />
-      <Tabs.Screen name="edit/[id]" options={{ href: null }} /> {/* 👈 CACHÉ */}
+      <Tabs.Screen name="edit/[id]" options={{ href: null }} />
+      <Tabs.Screen name="editprofile/[id]" options={{ href: null }} />
+      <Tabs.Screen name="chat/[id]" options={{ href: null }} />
     </Tabs>
   );
 }

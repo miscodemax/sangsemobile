@@ -44,6 +44,7 @@
     "react-dom": "19.0.0",
     "react-native": "0.79.3",
     "react-native-gesture-handler": "~2.24.0",
+    "react-native-gifted-chat": "^2.8.1",
     "react-native-paper": "^5.14.5",
     "react-native-reanimated": "~3.17.4",
     "react-native-reanimated-carousel": "^4.0.3",

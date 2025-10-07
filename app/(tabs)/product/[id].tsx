@@ -1,4 +1,3 @@
-// ProductDetailScreen.tsx - Ultra Soigné Style Vinted
 import { supabase } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -7,6 +6,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     Dimensions,
     Image,
@@ -22,7 +22,7 @@ import {
 import Carousel from 'react-native-reanimated-carousel';
 
 const { width, height } = Dimensions.get('window');
-const HEADER_MAX_HEIGHT = 450;
+const HEADER_MAX_HEIGHT = 420;
 const HEADER_MIN_HEIGHT = Platform.OS === 'ios' ? 88 : 64;
 const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
 
@@ -33,12 +33,32 @@ export default function ProductDetailScreen() {
     const [loading, setLoading] = useState(true);
     const [activeSlide, setActiveSlide] = useState(0);
     const [isFavorite, setIsFavorite] = useState(false);
+    const [showFullDescription, setShowFullDescription] = useState(false);
     const scrollY = useRef(new Animated.Value(0)).current;
     const scrollViewRef = useRef<ScrollView>(null);
+    const pulseAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
         if (id) fetchProduct();
     }, [id]);
+
+    useEffect(() => {
+        // Animation de pulse pour le bouton d'achat
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, {
+                    toValue: 1.05,
+                    duration: 1000,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(pulseAnim, {
+                    toValue: 1,
+                    duration: 1000,
+                    useNativeDriver: true,
+                }),
+            ])
+        ).start();
+    }, []);
 
     async function fetchProduct() {
         try {
@@ -61,7 +81,6 @@ export default function ProductDetailScreen() {
                 .eq('id', productData.user_id)
                 .single();
 
-            // Déterminer si nouveau (moins de 7 jours)
             const isNew = new Date().getTime() - new Date(productData.created_at).getTime() < 7 * 24 * 60 * 60 * 1000;
 
             setProduct({
@@ -72,6 +91,7 @@ export default function ProductDetailScreen() {
             });
         } catch (err) {
             console.error(err);
+            Alert.alert('Erreur', 'Impossible de charger ce produit');
         } finally {
             setLoading(false);
         }
@@ -81,7 +101,7 @@ export default function ProductDetailScreen() {
         if (!product) return;
         try {
             await Share.share({
-                message: `Découvre ${product.title} à ${product.price.toLocaleString()} FCFA sur SangSe ! 🛍️\nhttps://sangse.shop/product/${product.id}`,
+                message: `Découvre ${product.title} à ${product.price.toLocaleString()} FCFA sur SangseSho 🛍️\nhttps://sangseshop.sn/product/${product.id}`,
                 title: product.title,
             });
         } catch (error) {
@@ -91,16 +111,26 @@ export default function ProductDetailScreen() {
 
     const handleBuyNow = () => {
         if (!product) return;
-        console.log('hello');
-
-        //router.push(`/payment/escrow?productId=${product.id}`);
+        Alert.alert(
+            'Acheter maintenant',
+            `Confirmer l'achat de "${product.title}" pour ${product.price.toLocaleString()} FCFA ?`,
+            [
+                { text: 'Annuler', style: 'cancel' },
+                {
+                    text: 'Confirmer',
+                    onPress: () => {
+                        // Navigation vers le paiement escrow
+                        console.log('Achat confirmé');
+                    }
+                },
+            ]
+        );
     };
 
     const toggleFavorite = () => {
         setIsFavorite(!isFavorite);
     };
 
-    // Animation header
     const headerTranslateY = scrollY.interpolate({
         inputRange: [0, HEADER_SCROLL_DISTANCE],
         outputRange: [0, -HEADER_SCROLL_DISTANCE],
@@ -119,6 +149,12 @@ export default function ProductDetailScreen() {
         extrapolate: 'clamp',
     });
 
+    const imageScale = scrollY.interpolate({
+        inputRange: [-100, 0, HEADER_SCROLL_DISTANCE],
+        outputRange: [1.3, 1, 0.9],
+        extrapolate: 'clamp',
+    });
+
     const renderImage = ({ item, index }: { item: string; index: number }) => (
         <View style={styles.imageSlide}>
             <Image source={{ uri: item }} style={styles.productImage} resizeMode="cover" />
@@ -128,7 +164,10 @@ export default function ProductDetailScreen() {
     if (loading || !product) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#F6C445" />
+                <View style={styles.loaderCircle}>
+                    <ActivityIndicator size="large" color="#F6C445" />
+                </View>
+                <Text style={styles.loadingText}>Chargement du produit...</Text>
             </View>
         );
     }
@@ -137,15 +176,7 @@ export default function ProductDetailScreen() {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-            {/* Fixed Animated Header */}
-            <Animated.View
-                style={[
-                    styles.fixedHeader,
-                    {
-                        opacity: headerOpacity,
-                    },
-                ]}
-            >
+            <Animated.View style={[styles.fixedHeader, { opacity: headerOpacity }]}>
                 <BlurView intensity={95} style={StyleSheet.absoluteFill} tint="light">
                     <View style={styles.fixedHeaderContent}>
                         <TouchableOpacity style={styles.headerIconButton} onPress={() => router.back()}>
@@ -171,12 +202,14 @@ export default function ProductDetailScreen() {
                 )}
                 showsVerticalScrollIndicator={false}
             >
-                {/* Image Carousel with overlay controls */}
                 <Animated.View
                     style={[
                         styles.imageCarouselContainer,
                         {
-                            transform: [{ translateY: headerTranslateY }],
+                            transform: [
+                                { translateY: headerTranslateY },
+                                { scale: imageScale }
+                            ],
                             opacity: imageOpacity,
                         },
                     ]}
@@ -193,26 +226,21 @@ export default function ProductDetailScreen() {
                         }}
                     />
 
-                    {/* Image counter overlay */}
                     <View style={styles.imageCounter}>
+                        <Ionicons name="images" size={14} color="#fff" />
                         <Text style={styles.imageCounterText}>
-                            {activeSlide + 1} / {product.images.length}
+                            {activeSlide + 1}/{product.images.length}
                         </Text>
                     </View>
 
-                    {/* Top gradient for better readability */}
                     <LinearGradient
-                        colors={['rgba(0,0,0,0.6)', 'transparent']}
+                        colors={['rgba(0,0,0,0.5)', 'transparent']}
                         style={styles.topGradient}
                         pointerEvents="none"
                     />
 
-                    {/* Floating action buttons */}
                     <View style={styles.floatingActions}>
-                        <TouchableOpacity
-                            style={styles.floatingButton}
-                            onPress={() => router.back()}
-                        >
+                        <TouchableOpacity style={styles.floatingButton} onPress={() => router.back()}>
                             <Ionicons name="arrow-back" size={24} color="#fff" />
                         </TouchableOpacity>
 
@@ -228,12 +256,11 @@ export default function ProductDetailScreen() {
                                 />
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.floatingButton} onPress={handleShare}>
-                                <Ionicons name="share-social" size={22} color="#fff" />
+                                <Ionicons name="share-social-outline" size={22} color="#fff" />
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    {/* New badge */}
                     {product.isNew && (
                         <View style={styles.newBadge}>
                             <LinearGradient
@@ -242,13 +269,12 @@ export default function ProductDetailScreen() {
                                 end={{ x: 1, y: 1 }}
                                 style={styles.newBadgeGradient}
                             >
-                                <Ionicons name="star" size={14} color="#1C2B49" />
+                                <Ionicons name="sparkles" size={14} color="#1C2B49" />
                                 <Text style={styles.newBadgeText}>Nouveau</Text>
                             </LinearGradient>
                         </View>
                     )}
 
-                    {/* Pagination dots */}
                     <View style={styles.paginationDots}>
                         {product.images.map((_: any, index: number) => (
                             <View
@@ -262,183 +288,235 @@ export default function ProductDetailScreen() {
                     </View>
                 </Animated.View>
 
-                {/* Content Card - appears to slide over image */}
                 <View style={styles.contentCard}>
-                    {/* Price section - Hero element */}
-                    <View style={styles.priceSection}>
-                        <View style={styles.priceRow}>
-                            <View>
-                                <Text style={styles.priceLabel}>Prix</Text>
-                                <View style={styles.priceContainer}>
-                                    <Text style={styles.priceAmount}>
-                                        {product.price.toLocaleString()}
-                                    </Text>
-                                    <Text style={styles.priceCurrency}>FCFA</Text>
+                    {/* Title and Price Hero Section */}
+                    <View style={styles.heroSection}>
+                        <View style={styles.titleRow}>
+                            <View style={styles.titleContainer}>
+                                <Text style={styles.title}>{product.title}</Text>
+                                <View style={styles.metaRow}>
+                                    {product.category && (
+                                        <View style={styles.categoryBadge}>
+                                            <Text style={styles.categoryEmoji}>
+                                                {product.category === 'vetement' ? '👗' :
+                                                    product.category === 'electronique' ? '📱' :
+                                                        product.category === 'artisanat' ? '🎨' : '📦'}
+                                            </Text>
+                                            <Text style={styles.categoryText}>{product.category}</Text>
+                                        </View>
+                                    )}
+                                    <View style={styles.timeBadge}>
+                                        <Ionicons name="time-outline" size={12} color="#6B7280" />
+                                        <Text style={styles.timeText}>
+                                            {new Date(product.created_at).toLocaleDateString('fr-FR', {
+                                                day: 'numeric',
+                                                month: 'short',
+                                            })}
+                                        </Text>
+                                    </View>
                                 </View>
                             </View>
-                            <TouchableOpacity style={styles.makeOfferButton}>
-                                <Ionicons name="chatbubble-ellipses" size={20} color="#1C2B49" />
-                                <Text style={styles.makeOfferText}>Faire une offre</Text>
+                        </View>
+
+                        <View style={styles.priceCard}>
+                            <Text style={styles.priceLabel}>Prix</Text>
+                            <View style={styles.priceRow}>
+                                <Text style={styles.priceAmount}>{product.price.toLocaleString()}</Text>
+                                <Text style={styles.priceCurrency}>FCFA</Text>
+                            </View>
+                            <TouchableOpacity style={styles.negotiableButton}>
+                                <Ionicons name="cash-outline" size={16} color="#10B981" />
+                                <Text style={styles.negotiableText}>Prix négociable</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    {/* Title and category */}
-                    <View style={styles.titleSection}>
-                        <Text style={styles.title}>{product.title}</Text>
-                        <View style={styles.metaRow}>
-                            <View style={styles.categoryPill}>
-                                <Ionicons name="pricetag" size={14} color="#666" />
-                                <Text style={styles.categoryText}>{product.category}</Text>
-                            </View>
-                            <View style={styles.timePill}>
-                                <Ionicons name="time-outline" size={14} color="#666" />
-                                <Text style={styles.timeText}>
-                                    {new Date(product.created_at).toLocaleDateString('fr-FR', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                    })}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
-
-                    {/* Seller card - Premium style */}
+                    {/* Seller Card Premium */}
                     <TouchableOpacity
                         style={styles.sellerCard}
                         onPress={() => router.push(`/profile/${product.seller.id}`)}
-                        activeOpacity={0.8}
+                        activeOpacity={0.9}
                     >
-                        <View style={styles.sellerRow}>
-                            {/* Avatar */}
-                            <Image
-                                source={{ uri: product.seller.avatar_url }}
-                                style={styles.sellerAvatar}
-                            />
+                        <View style={styles.sellerContent}>
+                            <View style={styles.sellerLeft}>
+                                <Image
+                                    source={{ uri: product.seller.avatar_url || 'https://placehold.co/60x60/F3F4F6/888?text=U' }}
+                                    style={styles.sellerAvatar}
+                                />
+                                <View style={styles.onlineBadge} />
+                            </View>
 
-                            {/* Infos vendeur */}
                             <View style={styles.sellerInfo}>
-                                <Text style={styles.sellerName}>{product.seller.username}</Text>
+                                <View style={styles.sellerNameRow}>
+                                    <Text style={styles.sellerName}>@{product.seller.username}</Text>
+                                    <View style={styles.verifiedBadge}>
+                                        <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                    </View>
+                                </View>
 
-                                {/* Bio */}
-                                {product.seller.bio ? (
-                                    <Text style={styles.sellerBio} numberOfLines={1} ellipsizeMode="tail">
+                                {product.seller.bio && (
+                                    <Text style={styles.sellerBio} numberOfLines={1}>
                                         {product.seller.bio}
                                     </Text>
-                                ) : null}
+                                )}
 
-                                {/* Stats */}
                                 <View style={styles.sellerStats}>
-                                    <View style={styles.statItem}>
+                                    <View style={styles.sellerStat}>
                                         <Ionicons name="star" size={14} color="#F6C445" />
-                                        <Text style={styles.statText}>4.8</Text>
+                                        <Text style={styles.sellerStatText}>4.9 (127)</Text>
                                     </View>
-
                                     <View style={styles.statDivider} />
-
-                                    <View style={styles.statItem}>
-                                        <Ionicons name="cube" size={14} color="#666" />
-                                        <Text style={styles.statText}>24 ventes</Text>
+                                    <View style={styles.sellerStat}>
+                                        <Ionicons name="time" size={14} color="#6B7280" />
+                                        <Text style={styles.sellerStatText}>Répond en 1h</Text>
                                     </View>
                                 </View>
                             </View>
 
-                            {/* Chevron */}
-                            <Ionicons name="chevron-forward" size={20} color="#999" />
+                            <Ionicons name="chevron-forward" size={24} color="#D1D5DB" />
                         </View>
                     </TouchableOpacity>
 
                     {/* Description */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Description</Text>
-                        <Text style={styles.descriptionText}>{product.description}</Text>
+                        <Text
+                            style={styles.descriptionText}
+                            numberOfLines={showFullDescription ? undefined : 4}
+                        >
+                            {product.description}
+                        </Text>
+                        {product.description && product.description.length > 150 && (
+                            <TouchableOpacity
+                                onPress={() => setShowFullDescription(!showFullDescription)}
+                                style={styles.showMoreButton}
+                            >
+                                <Text style={styles.showMoreText}>
+                                    {showFullDescription ? 'Voir moins' : 'Voir plus'}
+                                </Text>
+                                <Ionicons
+                                    name={showFullDescription ? 'chevron-up' : 'chevron-down'}
+                                    size={16}
+                                    color="#F6C445"
+                                />
+                            </TouchableOpacity>
+                        )}
                     </View>
 
-                    {/* Product details grid */}
+                    {/* Product Details */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Détails du produit</Text>
-                        <View style={styles.detailsGrid}>
+                        <Text style={styles.sectionTitle}>Détails</Text>
+                        <View style={styles.detailsList}>
                             {product.category && (
                                 <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Catégorie</Text>
-                                    <Text style={styles.detailValue}>{product.category}</Text>
+                                    <View style={styles.detailIcon}>
+                                        <Ionicons name="pricetag" size={18} color="#6B7280" />
+                                    </View>
+                                    <View style={styles.detailContent}>
+                                        <Text style={styles.detailLabel}>Catégorie</Text>
+                                        <Text style={styles.detailValue}>{product.category}</Text>
+                                    </View>
                                 </View>
                             )}
                             {product.zone && (
                                 <View style={styles.detailItem}>
-                                    <Text style={styles.detailLabel}>Localisation</Text>
-                                    <Text style={styles.detailValue}>{product.zone}</Text>
+                                    <View style={styles.detailIcon}>
+                                        <Ionicons name="location" size={18} color="#6B7280" />
+                                    </View>
+                                    <View style={styles.detailContent}>
+                                        <Text style={styles.detailLabel}>Localisation</Text>
+                                        <Text style={styles.detailValue}>{product.zone}</Text>
+                                    </View>
                                 </View>
                             )}
                             <View style={styles.detailItem}>
-                                <Text style={styles.detailLabel}>État</Text>
-                                <Text style={styles.detailValue}>Excellent</Text>
-                            </View>
-                            <View style={styles.detailItem}>
-                                <Text style={styles.detailLabel}>ID produit</Text>
-                                <Text style={styles.detailValue}>#{product.id}</Text>
+                                <View style={styles.detailIcon}>
+                                    <Ionicons name="shield-checkmark" size={18} color="#6B7280" />
+                                </View>
+                                <View style={styles.detailContent}>
+                                    <Text style={styles.detailLabel}>État</Text>
+                                    <Text style={styles.detailValue}>Comme neuf</Text>
+                                </View>
                             </View>
                         </View>
                     </View>
 
-                    {/* Trust & Safety section */}
+                    {/* Trust Section */}
                     <View style={styles.trustSection}>
-                        <Text style={styles.sectionTitle}>Acheter en toute confiance</Text>
-                        <View style={styles.trustItems}>
+                        <Text style={styles.sectionTitle}>Acheter en toute sécurité</Text>
+                        <View style={styles.trustList}>
                             <View style={styles.trustItem}>
-                                <View style={styles.trustIcon}>
-                                    <Ionicons name="shield-checkmark" size={24} color="#34C759" />
+                                <View style={[styles.trustIconContainer, { backgroundColor: '#D1FAE5' }]}>
+                                    <Ionicons name="shield-checkmark" size={24} color="#10B981" />
                                 </View>
-                                <View style={styles.trustContent}>
+                                <View style={styles.trustTextContainer}>
                                     <Text style={styles.trustTitle}>Paiement sécurisé</Text>
-                                    <Text style={styles.trustDesc}>
-                                        Protection escrow jusqu'à réception
+                                    <Text style={styles.trustDescription}>
+                                        Transaction protégée par escrow
                                     </Text>
                                 </View>
                             </View>
+
                             <View style={styles.trustItem}>
-                                <View style={styles.trustIcon}>
-                                    <Ionicons name="time" size={24} color="#007AFF" />
+                                <View style={[styles.trustIconContainer, { backgroundColor: '#DBEAFE' }]}>
+                                    <Ionicons name="cube" size={24} color="#3B82F6" />
                                 </View>
-                                <View style={styles.trustContent}>
-                                    <Text style={styles.trustTitle}>Livraison rapide</Text>
-                                    <Text style={styles.trustDesc}>
-                                        Vendeur répond en moins de 2h
+                                <View style={styles.trustTextContainer}>
+                                    <Text style={styles.trustTitle}>Livraison flexible</Text>
+                                    <Text style={styles.trustDescription}>
+                                        Remise en main propre ou livraison
+                                    </Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.trustItem}>
+                                <View style={[styles.trustIconContainer, { backgroundColor: '#FEF3C7' }]}>
+                                    <Ionicons name="ribbon" size={24} color="#F59E0B" />
+                                </View>
+                                <View style={styles.trustTextContainer}>
+                                    <Text style={styles.trustTitle}>Vendeur vérifié</Text>
+                                    <Text style={styles.trustDescription}>
+                                        Profil authentifié par notre équipe
                                     </Text>
                                 </View>
                             </View>
                         </View>
                     </View>
 
-                    {/* Bottom spacing for fixed button */}
-                    <View style={{ height: 120 }} />
+                    <View style={{ height: 140 }} />
                 </View>
             </Animated.ScrollView>
 
-            {/* Fixed bottom CTA */}
+            {/* Fixed Bottom CTA */}
             <View style={styles.bottomCTA}>
                 <BlurView intensity={95} style={StyleSheet.absoluteFill} tint="light" />
                 <View style={styles.ctaContent}>
                     <TouchableOpacity
                         style={styles.contactButton}
-                    >
-                        <Ionicons name="chatbubble-ellipses-outline" size={24} color="#1C2B49" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.buyButton}
-                        onPress={handleBuyNow}
+                        onPress={() => router.push(`/chat/${product.seller.id}`)}
                         activeOpacity={0.8}
                     >
-                        <LinearGradient
-                            colors={['#1C2B49', '#2a3d66']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.buyButtonGradient}
-                        >
-                            <Ionicons name="lock-closed" size={20} color="#fff" />
-                            <Text style={styles.buyButtonText}>Acheter maintenant</Text>
-                        </LinearGradient>
+                        <Ionicons name="chatbubble-ellipses" size={24} color="#1C2B49" />
+                        <Text style={styles.contactButtonText}>Message</Text>
                     </TouchableOpacity>
+
+                    <Animated.View style={[styles.buyButtonWrapper, { transform: [{ scale: pulseAnim }] }]}>
+                        <TouchableOpacity
+                            style={styles.buyButton}
+                            onPress={handleBuyNow}
+                            activeOpacity={0.9}
+                        >
+                            <LinearGradient
+                                colors={['#F6C445', '#F0A500']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.buyButtonGradient}
+                            >
+                                <Ionicons name="lock-closed" size={20} color="#1C2B49" />
+                                <Text style={styles.buyButtonText}>Acheter maintenant</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </Animated.View>
                 </View>
             </View>
         </View>
@@ -446,27 +524,43 @@ export default function ProductDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+    // --- Conteneurs et état de chargement ---
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F8F9FB', // Un gris très clair pour le fond général
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F8F9FB',
+    },
+    loaderCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: '#FEF3C7', // Fond jaune pâle pour l'indicateur
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    loadingText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1F2937', // Texte gris foncé
     },
     scrollView: {
         flex: 1,
     },
+
+    // --- Header animé et fixe ---
     fixedHeader: {
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        height: HEADER_MIN_HEIGHT + (Platform.OS === 'ios' ? 44 : 0),
+        height: HEADER_MIN_HEIGHT, // Hauteur minimale du header
         zIndex: 1000,
-        elevation: 10,
     },
     fixedHeaderContent: {
         flex: 1,
@@ -474,30 +568,32 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingTop: Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0,
+        paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 10, // Marge pour la barre de statut
     },
     headerIconButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.9)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     headerTitle: {
         flex: 1,
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1C2B49',
+        fontSize: 17,
+        fontWeight: '700',
+        color: '#1C2B49', // Bleu nuit pour le titre
+        textAlign: 'center',
         marginHorizontal: 12,
     },
+
+    // --- Carousel d'images (Header) ---
     imageCarouselContainer: {
         height: HEADER_MAX_HEIGHT,
+        backgroundColor: '#E5E7EB', // Couleur de fond si l'image charge
     },
     imageSlide: {
-        width,
+        width: width,
         height: HEADER_MAX_HEIGHT,
-        backgroundColor: '#000',
     },
     productImage: {
         width: '100%',
@@ -508,11 +604,11 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        height: 120,
+        height: 140, // Dégradé pour la lisibilité des boutons flottants
     },
     floatingActions: {
         position: 'absolute',
-        top: Platform.OS === 'ios' ? 54 : 40,
+        top: Platform.OS === 'ios' ? 60 : 40,
         left: 0,
         right: 0,
         flexDirection: 'row',
@@ -523,348 +619,429 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-        backdropFilter: 'blur(10px)',
+        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 5,
     },
     favoriteActive: {
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        backgroundColor: 'rgba(255, 255, 255, 0.98)', // Fond blanc pour le favori actif
     },
     floatingRightButtons: {
-        gap: 8,
+        flexDirection: 'row',
+        gap: 12,
     },
     imageCounter: {
         position: 'absolute',
         bottom: 70,
         right: 16,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: 'rgba(0,0,0,0.7)',
         paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-        backdropFilter: 'blur(10px)',
+        paddingVertical: 8,
+        borderRadius: 20,
     },
     imageCounterText: {
         color: '#fff',
         fontSize: 12,
-        fontWeight: '600',
+        fontWeight: '700',
     },
     newBadge: {
         position: 'absolute',
-        top: Platform.OS === 'ios' ? 110 : 96,
+        top: Platform.OS === 'ios' ? 120 : 100,
         left: 16,
         borderRadius: 20,
         overflow: 'hidden',
+        shadowColor: '#F59E0B',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        elevation: 6,
     },
     newBadgeGradient: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
+        paddingHorizontal: 14,
         paddingVertical: 8,
         gap: 6,
     },
     newBadgeText: {
         color: '#1C2B49',
-        fontSize: 12,
-        fontWeight: '700',
+        fontSize: 13,
+        fontWeight: '800',
     },
     paginationDots: {
         position: 'absolute',
-        bottom: 20,
+        bottom: 38, // Positionné sous le contenu principal
         flexDirection: 'row',
         alignSelf: 'center',
-        gap: 6,
+        gap: 8,
     },
     dot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: 'rgba(255,255,255,0.5)',
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: 'rgba(255,255,255,0.4)',
     },
     dotActive: {
-        backgroundColor: '#F6C445',
-        width: 20,
+        backgroundColor: '#F6C445', // Couleur d'accentuation
+        width: 24, // Le point actif est plus large
     },
+
+    // --- Contenu principal (sous les images) ---
     contentCard: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        marginTop: -24,
+        backgroundColor: '#F8F9FB',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        marginTop: -32, // Superposition sur l'image
         paddingTop: 24,
-        minHeight: height - HEADER_MAX_HEIGHT + 100,
     },
-    priceSection: {
-        backgroundColor: '#fff',
+
+    // --- Section Titre & Prix ---
+    heroSection: {
+        backgroundColor: '#FFF',
         marginHorizontal: 16,
-        borderRadius: 16,
+        borderRadius: 20,
         padding: 20,
-        marginBottom: 12,
+        marginBottom: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.08,
-        shadowRadius: 12,
-        elevation: 3,
+        shadowRadius: 16,
+        elevation: 5,
     },
-    priceRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+    titleRow: {
+        marginBottom: 16,
     },
-    priceLabel: {
-        fontSize: 13,
-        color: '#666',
-        marginBottom: 4,
-        fontWeight: '500',
-    },
-    priceContainer: {
-        flexDirection: 'row',
-        alignItems: 'baseline',
-        gap: 6,
-    },
-    priceAmount: {
-        fontSize: 32,
-        fontWeight: '800',
-        color: '#1C2B49',
-    },
-    priceCurrency: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#666',
-    },
-    makeOfferButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F6C445',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 12,
-        gap: 6,
-    },
-    makeOfferText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#1C2B49',
-    },
-    titleSection: {
-        backgroundColor: '#fff',
-        marginHorizontal: 16,
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 12,
+    titleContainer: {
+        flex: 1,
     },
     title: {
-        fontSize: 22,
-        fontWeight: '700',
-        color: '#1C2B49',
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#1F2937',
         marginBottom: 12,
-        lineHeight: 28,
+        lineHeight: 32,
     },
     metaRow: {
         flexDirection: 'row',
         gap: 8,
+        flexWrap: 'wrap',
     },
-    categoryPill: {
+    categoryBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#FEF3C7',
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 20,
-        gap: 4,
+        borderRadius: 16,
+        gap: 6,
+    },
+    categoryEmoji: {
+        fontSize: 14,
     },
     categoryText: {
         fontSize: 12,
-        fontWeight: '600',
-        color: '#666',
+        fontWeight: '700',
+        color: '#92400E', // Marron foncé pour contraster avec le jaune
+        textTransform: 'capitalize',
     },
-    timePill: {
+    timeBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F3F4F6',
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 20,
-        gap: 4,
+        borderRadius: 16,
+        gap: 6,
     },
     timeText: {
         fontSize: 12,
         fontWeight: '600',
-        color: '#666',
+        color: '#6B7280',
     },
-    sellerCard: {
-        backgroundColor: '#fff',
-        marginHorizontal: 16,
-        borderRadius: 16,
+    priceCard: {
+        backgroundColor: '#F8F9FB', // Fond légèrement différent pour le contraste
         padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
+        borderRadius: 16,
     },
-    sellerRow: {
+    priceLabel: {
+        fontSize: 13,
+        color: '#6B7280',
+        fontWeight: '600',
+        marginBottom: 6,
+    },
+    priceRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        gap: 8,
+        marginBottom: 12,
+    },
+    priceAmount: {
+        fontSize: 36,
+        fontWeight: '800',
+        color: '#1F2937',
+    },
+    priceCurrency: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#6B7280',
+    },
+    negotiableButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        alignSelf: 'flex-start',
+    },
+    negotiableText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#10B981', // Vert pour indiquer une action positive
+    },
+
+    // --- Carte du vendeur ---
+    sellerCard: {
+        backgroundColor: '#FFF',
+        marginHorizontal: 16,
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    sellerContent: {
         flexDirection: 'row',
         alignItems: 'center',
     },
+    sellerLeft: {
+        marginRight: 16,
+    },
     sellerAvatar: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: '#F0F0F0',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        borderWidth: 2,
+        borderColor: '#F3F4F6',
+    },
+    onlineBadge: {
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        backgroundColor: '#10B981', // Vert pour "en ligne"
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        borderWidth: 2,
+        borderColor: '#FFF',
     },
     sellerInfo: {
         flex: 1,
-        marginLeft: 12,
+    },
+    sellerNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
     },
     sellerName: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#1C2B49',
-        marginBottom: 2,
+        color: '#1F2937',
+    },
+    verifiedBadge: {
+        marginLeft: 6,
     },
     sellerBio: {
         fontSize: 13,
-        color: '#666',
-        marginBottom: 6,
+        color: '#6B7280',
     },
     sellerStats: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginTop: 8,
     },
-    statItem: {
+    sellerStat: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
     },
-    statText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#666',
-    },
     statDivider: {
         width: 1,
-        height: 12,
+        height: 14,
         backgroundColor: '#E5E7EB',
-        marginHorizontal: 10,
+        marginHorizontal: 12,
     },
+    sellerStatText: {
+        fontSize: 12,
+        color: '#4B5563',
+        fontWeight: '600',
+    },
+
+    // --- Sections de contenu (Description, Détails, etc.) ---
     section: {
-        backgroundColor: '#fff',
-        marginHorizontal: 16,
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6', // Séparateur très léger
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: '700',
-        color: '#1C2B49',
+        fontWeight: 'bold',
+        color: '#1F2937',
         marginBottom: 12,
     },
     descriptionText: {
         fontSize: 15,
-        lineHeight: 24,
-        color: '#444',
+        color: '#4B5563',
+        lineHeight: 24, // Pour une meilleure lisibilité
     },
-    detailsGrid: {
+    showMoreButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 10,
+        alignSelf: 'flex-start',
+    },
+    showMoreText: {
+        color: '#F6C445',
+        fontWeight: 'bold',
+        fontSize: 14,
+        marginRight: 4,
+    },
+
+    // --- Liste des détails du produit ---
+    detailsList: {
         gap: 16,
     },
     detailItem: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F0F0F0',
-    },
-    detailLabel: {
-        fontSize: 14,
-        color: '#666',
-        fontWeight: '500',
-    },
-    detailValue: {
-        fontSize: 14,
-        color: '#1C2B49',
-        fontWeight: '600',
-    },
-    trustSection: {
-        backgroundColor: '#fff',
-        marginHorizontal: 16,
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 12,
-    },
-    trustItems: {
-        gap: 16,
-    },
-    trustItem: {
-        flexDirection: 'row',
         alignItems: 'center',
     },
-    trustIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#F8F9FA',
+    detailIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F3F4F6',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
     },
-    trustContent: {
+    detailContent: {
+        flex: 1,
+    },
+    detailLabel: {
+        fontSize: 13,
+        color: '#6B7280',
+    },
+    detailValue: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1F2937',
+        textTransform: 'capitalize',
+    },
+
+    // --- Section Confiance & Sécurité ---
+    trustSection: {
+        backgroundColor: '#FFF',
+        borderRadius: 20,
+        padding: 20,
+        paddingBottom: 50,
+        marginHorizontal: 16,
+        marginTop: 16,
+    },
+    trustList: {
+        gap: 20,
+        marginTop: 16,
+    },
+    trustItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    trustIconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    trustTextContainer: {
         flex: 1,
     },
     trustTitle: {
         fontSize: 15,
-        fontWeight: '600',
-        color: '#1C2B49',
-        marginBottom: 2,
+        fontWeight: '700',
+        color: '#1F2937',
     },
-    trustDesc: {
+    trustDescription: {
         fontSize: 13,
-        color: '#666',
+        color: '#6B7280',
+        marginTop: 2,
     },
+
+    // --- Barre d'action fixe en bas (CTA) ---
     bottomCTA: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        overflow: 'hidden',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.05)',
+        marginBottom: 90,
     },
     ctaContent: {
         flexDirection: 'row',
-        padding: 16,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 16, // Safe area pour iPhone
         gap: 12,
+        backgroundColor: 'transparent',
     },
     contactButton: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#fff',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#E5E7EB',
-    },
-    buyButton: {
-        flex: 1,
-        height: 56,
-        borderRadius: 28,
-        overflow: 'hidden',
-    },
-    buyButtonGradient: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
+        backgroundColor: '#E5E7EB', // Fond neutre pour l'action secondaire
+        height: 56,
+        borderRadius: 28,
+        flex: 1,
+    },
+    contactButtonText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#1C2B49',
+    },
+    buyButtonWrapper: {
+        flex: 2, // Le bouton d'achat est plus large
+    },
+    buyButton: {
+        shadowColor: '#F59E0B',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 8,
+    },
+    buyButtonGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        height: 56,
+        borderRadius: 28,
     },
     buyButtonText: {
         fontSize: 16,
-        fontWeight: '700',
-        color: '#fff',
+        fontWeight: 'bold',
+        color: '#1C2B49',
     },
 });
