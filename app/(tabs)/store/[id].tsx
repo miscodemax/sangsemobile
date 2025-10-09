@@ -11,12 +11,11 @@ import {
     Image,
     RefreshControl,
     SafeAreaView,
-    ScrollView,
     StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 
 type Product = {
@@ -152,7 +151,7 @@ export default function StoreScreen() {
     }
 
     const handleEdit = (productId: string) => router.push(`/edit/${productId}`);
-    const goToNew = () => router.push('/vendre');
+    const goToNew = () => router.push('../vendre');
     const goToProduct = (productId: string) => router.push(`/product/${productId}`);
 
     const displayName = profile?.display_name || user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Utilisateur';
@@ -229,7 +228,7 @@ export default function StoreScreen() {
                 </View>
             </Animated.View>
 
-            <ScrollView
+            <Animated.ScrollView
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={
                     <RefreshControl
@@ -381,7 +380,7 @@ export default function StoreScreen() {
                         </View>
                     </Animated.View>
                 )}
-            </ScrollView>
+            </Animated.ScrollView>
 
             {/* Floating Action Button */}
             {canManage && products.length > 0 && (
