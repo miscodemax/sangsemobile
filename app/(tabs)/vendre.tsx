@@ -18,6 +18,7 @@ import {
     ScrollView,
     StatusBar,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -195,19 +196,16 @@ const ImagePickerField = ({ images, setImages, error }) => {
                     <View key={index} style={styles.imageWrapper}>
                         <Image source={{ uri }} style={styles.imagePreview} />
 
-                        {/* Badge couverture */}
                         {index === 0 && (
                             <View style={styles.coverBadge}>
                                 <Text style={styles.coverBadgeText}>Couverture</Text>
                             </View>
                         )}
 
-                        {/* Numéro */}
                         <View style={styles.imageNumber}>
                             <Text style={styles.imageNumberText}>{index + 1}</Text>
                         </View>
 
-                        {/* Boutons */}
                         <View style={styles.imageActions}>
                             {index !== 0 && (
                                 <TouchableOpacity
@@ -227,7 +225,6 @@ const ImagePickerField = ({ images, setImages, error }) => {
                     </View>
                 ))}
 
-                {/* Boutons d'ajout */}
                 {images.length < 5 && (
                     <View style={{ flexDirection: 'row', gap: 12 }}>
                         <TouchableOpacity style={styles.addImageBtn} onPress={pickImage}>
@@ -275,6 +272,9 @@ export default function SellScreen() {
         description: '',
         whatsappNumber: '',
         category: '',
+        hasWholesale: false,
+        wholesalePrice: '',
+        minWholesaleQty: '',
     });
     const [errors, setErrors] = useState({});
     const [images, setImages] = useState<string[]>([]);
@@ -295,12 +295,12 @@ export default function SellScreen() {
         return () => { mounted = false; };
     }, [user]);
 
-    const handleInputChange = (name: string, value: string) => {
-        if (name === 'price') {
-            const numeric = value.replace(/[^0-9]/g, '');
+    const handleInputChange = (name: string, value: string | boolean) => {
+        if (name === 'price' || name === 'wholesalePrice') {
+            const numeric = String(value).replace(/[^0-9]/g, '');
             setForm(prev => ({ ...prev, [name]: numeric }));
-        } else if (name === 'whatsappNumber') {
-            setForm(prev => ({ ...prev, [name]: value.replace(/[^0-9]/g, '') }));
+        } else if (name === 'whatsappNumber' || name === 'minWholesaleQty') {
+            setForm(prev => ({ ...prev, [name]: String(value).replace(/[^0-9]/g, '') }));
         } else {
             setForm(prev => ({ ...prev, [name]: value }));
         }
@@ -314,12 +314,13 @@ export default function SellScreen() {
 
     const calculateProgress = () => {
         let progress = 0;
-        if (images.length > 0) progress += 25;
-        if (form.category) progress += 25;
+        if (images.length > 0) progress += 20;
+        if (form.category) progress += 20;
         if (form.title) progress += 15;
         if (form.price) progress += 15;
         if (form.description) progress += 10;
         if (form.whatsappNumber) progress += 10;
+        if (form.hasWholesale && form.wholesalePrice && form.minWholesaleQty) progress += 10;
         return progress;
     };
 
@@ -329,6 +330,15 @@ export default function SellScreen() {
         if (!form.price.trim()) newErrors.price = 'Le prix est obligatoire';
         if (!form.category) newErrors.category = 'Choisissez une catégorie';
         if (images.length === 0) newErrors.images = 'Ajoutez au moins une photo';
+
+        if (form.hasWholesale) {
+            if (!form.wholesalePrice.trim()) newErrors.wholesalePrice = 'Prix de gros obligatoire';
+            if (!form.minWholesaleQty.trim()) newErrors.minWholesaleQty = 'Quantité minimale obligatoire';
+            if (form.wholesalePrice && form.price && parseFloat(form.wholesalePrice) >= parseFloat(form.price)) {
+                newErrors.wholesalePrice = 'Le prix de gros doit être inférieur au prix unitaire';
+            }
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -356,17 +366,22 @@ export default function SellScreen() {
             const mainImage = uploadedUrls[0];
             const otherImages = uploadedUrls.slice(1);
 
+            const productData: any = {
+                title: form.title,
+                price: parseFloat(form.price),
+                category: form.category,
+                description: form.description,
+                user_id: user.id,
+                image_url: mainImage,
+                whatsapp_number: form.whatsappNumber ? '+221' + form.whatsappNumber : null,
+                has_wholesale: form.hasWholesale,
+                wholesale_price: form.hasWholesale && form.wholesalePrice ? parseFloat(form.wholesalePrice) : null,
+                min_wholesale_qty: form.hasWholesale && form.minWholesaleQty ? parseInt(form.minWholesaleQty) : null,
+            };
+
             const { data: product, error: productError } = await supabase
                 .from('product')
-                .insert({
-                    title: form.title,
-                    price: parseFloat(form.price),
-                    category: form.category,
-                    description: form.description,
-                    user_id: user.id,
-                    image_url: mainImage,
-                    whatsapp_number: form.whatsappNumber ? '+221' + form.whatsappNumber : null,
-                })
+                .insert(productData)
                 .select()
                 .single();
 
@@ -391,7 +406,8 @@ export default function SellScreen() {
 
     const displayName = profile?.display_name || user.user_metadata?.display_name || user.user_metadata?.full_name || (user.email ? user.email.split('@')[0] : 'utilisateur');
     const avatarUrl = profile?.avatar_url || user.user_metadata?.avatar_url || null;
-    const isFormValid = images.length > 0 && form.category && form.title && form.price;
+    const isFormValid = images.length > 0 && form.category && form.title && form.price &&
+        (!form.hasWholesale || (form.wholesalePrice && form.minWholesaleQty));
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -425,7 +441,7 @@ export default function SellScreen() {
                                 <View style={[styles.stepBadge, { backgroundColor: '#10b981' }]}>
                                     <Text style={styles.stepBadgeText}>3</Text>
                                 </View>
-                                <Text style={styles.sectionTitle}>Détails</Text>
+                                <Text style={styles.sectionTitle}>Détails & Prix</Text>
                             </View>
 
                             <ModernFormField label="Titre" required error={errors.title} helper="Soyez précis et descriptif">
@@ -438,7 +454,7 @@ export default function SellScreen() {
                                 />
                             </ModernFormField>
 
-                            <ModernFormField label="Prix (FCFA)" required error={errors.price}>
+                            <ModernFormField label="Prix unitaire (FCFA)" required error={errors.price}>
                                 <View style={styles.priceInput}>
                                     <TextInput
                                         style={[styles.input, { flex: 1 }]}
@@ -451,6 +467,74 @@ export default function SellScreen() {
                                     <Text style={styles.priceCurrency}>FCFA</Text>
                                 </View>
                             </ModernFormField>
+
+                            {/* Section Prix de Gros */}
+                            <View style={styles.wholesaleSection}>
+                                <View style={styles.wholesaleHeader}>
+                                    <View>
+                                        <Text style={styles.wholesaleTitle}>🏪 Prix de gros</Text>
+                                        <Text style={styles.wholesaleSubtitle}>
+                                            Activez pour vendre en grande quantité
+                                        </Text>
+                                    </View>
+                                    <Switch
+                                        value={form.hasWholesale}
+                                        onValueChange={val => handleInputChange('hasWholesale', val)}
+                                        trackColor={{ false: '#e5e7eb', true: '#86efac' }}
+                                        thumbColor={form.hasWholesale ? '#10b981' : '#f3f4f6'}
+                                    />
+                                </View>
+
+                                {form.hasWholesale && (
+                                    <View style={styles.wholesaleFields}>
+                                        <ModernFormField
+                                            label="Prix de gros unitaire (FCFA)"
+                                            required
+                                            error={errors.wholesalePrice}
+                                            helper="Doit être inférieur au prix unitaire"
+                                        >
+                                            <View style={styles.priceInput}>
+                                                <TextInput
+                                                    style={[styles.input, { flex: 1 }]}
+                                                    placeholder="3 500"
+                                                    placeholderTextColor="#9ca3af"
+                                                    keyboardType="numeric"
+                                                    value={prettyPrice(form.wholesalePrice)}
+                                                    onChangeText={p => handleInputChange('wholesalePrice', p)}
+                                                />
+                                                <Text style={styles.priceCurrency}>FCFA</Text>
+                                            </View>
+                                        </ModernFormField>
+
+                                        <ModernFormField
+                                            label="Quantité minimale"
+                                            required
+                                            error={errors.minWholesaleQty}
+                                            helper="Nombre minimum d'articles à commander"
+                                        >
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="Ex: 10"
+                                                placeholderTextColor="#9ca3af"
+                                                keyboardType="numeric"
+                                                value={form.minWholesaleQty}
+                                                onChangeText={q => handleInputChange('minWholesaleQty', q)}
+                                            />
+                                        </ModernFormField>
+
+                                        {form.price && form.wholesalePrice && form.minWholesaleQty && (
+                                            <View style={styles.wholesalePreview}>
+                                                <Text style={styles.wholesalePreviewText}>
+                                                    💰 Économie: {prettyPrice(String((parseFloat(form.price) - parseFloat(form.wholesalePrice)) * parseInt(form.minWholesaleQty)))} FCFA
+                                                </Text>
+                                                <Text style={styles.wholesalePreviewText}>
+                                                    pour {form.minWholesaleQty} articles
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                )}
+                            </View>
 
                             <ModernFormField label="Description" helper="État, taille, défauts éventuels...">
                                 <TextInput
@@ -513,6 +597,9 @@ export default function SellScreen() {
                             <Text style={styles.tipItem}>• Photos nettes avec bonne lumière</Text>
                             <Text style={styles.tipItem}>• Prix réaliste = vente 3x plus rapide</Text>
                             <Text style={styles.tipItem}>• Mentionnez tous les défauts</Text>
+                            {form.hasWholesale && (
+                                <Text style={styles.tipItem}>• Prix de gros attractif pour volumes</Text>
+                            )}
                         </View>
                     </View>
                 </ScrollView>
@@ -522,7 +609,6 @@ export default function SellScreen() {
 }
 
 const styles = StyleSheet.create({
-    // --- Conteneurs principaux ---
     safeArea: {
         flex: 1,
         backgroundColor: '#FAFAFA'
@@ -541,8 +627,6 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 2
     },
-
-    // --- Header ---
     modernHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -592,8 +676,6 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#f59e0b'
     },
-
-    // --- Barre de progression ---
     progressContainer: {
         marginBottom: 16,
         backgroundColor: '#fff',
@@ -626,8 +708,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#f59e0b',
         borderRadius: 8
     },
-
-    // --- Structure des sections ---
     section: {
         marginBottom: 24
     },
@@ -665,8 +745,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#f3f4f6',
         marginVertical: 24
     },
-
-    // --- Sélecteur de Photos ---
     imageScroll: {
         marginBottom: 12
     },
@@ -676,7 +754,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         marginRight: 12,
         position: 'relative',
-        overflow: 'hidden', // Pour s'assurer que les enfants respectent le borderRadius
+        overflow: 'hidden',
     },
     imagePreview: {
         width: '100%',
@@ -713,7 +791,7 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '700'
     },
-    imageActions: { // Note: l'opacité à 0 suggère une interaction pour le faire apparaître
+    imageActions: {
         position: 'absolute',
         top: 0, left: 0, right: 0, bottom: 0,
         backgroundColor: 'rgba(0,0,0,0.6)',
@@ -721,7 +799,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         gap: 8,
-        opacity: 0, // Mettre à 1 pour le voir, ou gérer via un état au "press"
+        opacity: 0,
     },
     setCoverBtn: {
         backgroundColor: '#fff',
@@ -773,15 +851,13 @@ const styles = StyleSheet.create({
         marginTop: 8,
         textAlign: 'center',
     },
-
-    // --- Sélecteur de Catégorie ---
     categoryGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 10
     },
     categoryCard: {
-        width: '48%', // Un peu moins de 50% pour gérer le gap
+        width: '48%',
         padding: 16,
         borderRadius: 16,
         borderWidth: 2,
@@ -816,8 +892,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-
-    // --- Champs de formulaire ---
     formField: {
         marginBottom: 20
     },
@@ -880,8 +954,48 @@ const styles = StyleSheet.create({
         color: '#6b7280',
         paddingLeft: 16,
     },
-
-    // --- Bouton de soumission ---
+    wholesaleSection: {
+        backgroundColor: '#f0fdf4',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
+        borderWidth: 2,
+        borderColor: '#bbf7d0',
+    },
+    wholesaleHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    wholesaleTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#166534',
+        marginBottom: 4,
+    },
+    wholesaleSubtitle: {
+        fontSize: 12,
+        color: '#15803d',
+    },
+    wholesaleFields: {
+        gap: 16,
+        paddingTop: 8,
+    },
+    wholesalePreview: {
+        backgroundColor: '#dcfce7',
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#86efac',
+        marginTop: 8,
+    },
+    wholesalePreviewText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#166534',
+        textAlign: 'center',
+    },
     submitBtn: {
         backgroundColor: '#f59e0b',
         flexDirection: 'row',
@@ -901,12 +1015,10 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#1f2937',
     },
-
-    // --- Section Conseils ---
     tips: {
         marginTop: 32,
         padding: 16,
-        backgroundColor: '#f0f9ff', // Un bleu très clair pour se démarquer
+        backgroundColor: '#f0f9ff',
         borderRadius: 16,
         borderWidth: 1,
         borderColor: '#e0f2fe',
@@ -922,8 +1034,6 @@ const styles = StyleSheet.create({
         color: '#075985',
         lineHeight: 20,
     },
-
-    // --- Message d'erreur ---
     errorText: {
         color: '#ef4444',
         fontSize: 12,
