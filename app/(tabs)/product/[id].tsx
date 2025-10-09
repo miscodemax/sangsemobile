@@ -1,9 +1,7 @@
-// 👇 AJOUTS : Importer les hooks nécessaires pour le chat
 import AuthModal from '@/app/composants/authModal';
 import { useAuth } from '@/context/authContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Ionicons } from '@expo/vector-icons';
-import { useSendbirdChat } from '@sendbird/uikit-react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,6 +12,7 @@ import {
     Animated,
     Dimensions,
     Image,
+    Linking,
     Platform,
     ScrollView,
     StatusBar,
@@ -32,24 +31,18 @@ const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
 export default function ProductDetailScreen() {
     const router = useRouter();
     const { id } = useLocalSearchParams();
+    const { user } = useAuth();
     const [product, setProduct] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [activeSlide, setActiveSlide] = useState(0);
     const [isFavorite, setIsFavorite] = useState(false);
     const [showFullDescription, setShowFullDescription] = useState(false);
     const [authVisible, setAuthVisible] = useState(false);
+    const [selectedPriceType, setSelectedPriceType] = useState<'unit' | 'wholesale'>('unit');
 
     const scrollY = useRef(new Animated.Value(0)).current;
     const scrollViewRef = useRef<ScrollView>(null);
     const pulseAnim = useRef(new Animated.Value(1)).current;
-
-    // 👇 AJOUTS : Hooks et état pour la logique du chat
-    const { user } = useAuth(); // L'utilisateur actuel (acheteur)
-    const { sdk } = useSendbirdChat(); // Le SDK de Sendbird
-    const [isCreatingChat, setIsCreatingChat] = useState(false); // État de chargement pour le bouton
-
-
-    useEffect(() => { if (!user) setAuthVisible(true); }, [user]);
 
     useEffect(() => {
         if (id) fetchProduct();
@@ -93,6 +86,11 @@ export default function ProductDetailScreen() {
                 seller: sellerData,
                 isNew,
             });
+
+            // Sélectionner automatiquement le prix de gros s'il existe
+            if (productData.has_wholesale) {
+                setSelectedPriceType('wholesale');
+            }
         } catch (err) {
             console.error(err);
             Alert.alert('Erreur', 'Impossible de charger ce produit');
@@ -101,58 +99,74 @@ export default function ProductDetailScreen() {
         }
     }
 
-
-    // 👇 AJOUT : La fonction qui gère le clic sur "Contacter le vendeur"
-    const onContactSeller = async () => {
-        // 1. Vérifier si l'acheteur est connecté
-        if (!user) {
-            Alert.alert("Connexion requise", "Veuillez vous connecter pour contacter le vendeur.");
-            // Idéalement, ouvrir ton AuthModal ici si tu l'as dans un contexte global
-            return <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />;
-        }
-
-        // 2. Vérifier que l'utilisateur n'est pas le vendeur
-        if (user.id === product.seller.id) {
-            Alert.alert("Action impossible", "Vous ne pouvez pas vous envoyer de message.");
+    const handleWhatsApp = () => {
+        if (!product.whatsapp_number) {
+            Alert.alert('Indisponible', 'Le vendeur n\'a pas fourni de numéro WhatsApp');
             return;
         }
 
-        setIsCreatingChat(true);
-        try {
-            // 3. Créer le canal de discussion avec Sendbird
-            const params = {
-                invitedUserIds: [product.seller.id], // ID du vendeur
-                isDistinct: true, // Réutilise la conversation si elle existe déjà
-            };
+        const priceInfo = selectedPriceType === 'wholesale' && product.has_wholesale
+            ? `Prix de gros: ${product.wholesale_price.toLocaleString()} FCFA (min. ${product.min_wholesale_qty} unités)`
+            : `Prix: ${product.price.toLocaleString()} FCFA`;
 
-            const channel = await sdk.groupChannel.createChannel(params);
+        const message = `Bonjour, je suis intéressé(e) par votre article "${product.title}". ${priceInfo}`;
+        const url = `whatsapp://send?phone=${product.whatsapp_number}&text=${encodeURIComponent(message)}`;
 
-            // 4. Naviguer vers l'écran de chat avec l'URL du canal
-            router.push({
-                pathname: "/chat",
-                params: { channelUrl: channel.url }
-            });
-
-        } catch (error) {
-            console.error("Erreur lors de la création du canal de chat:", error);
-            Alert.alert("Erreur", "Impossible de démarrer la conversation.");
-        } finally {
-            setIsCreatingChat(false);
-        }
+        Linking.canOpenURL(url)
+            .then((supported) => {
+                if (supported) {
+                    return Linking.openURL(url);
+                } else {
+                    Alert.alert('Erreur', 'WhatsApp n\'est pas installé sur cet appareil');
+                }
+            })
+            .catch(() => Alert.alert('Erreur', 'Impossible d\'ouvrir WhatsApp'));
     };
 
-    const handleShare = async () => { /* ... */ };
-    const handleBuyNow = () => { /* ... */ };
-    const toggleFavorite = () => { /* ... */ };
-    const headerTranslateY = scrollY.interpolate({ /* ... */ });
-    const imageOpacity = scrollY.interpolate({ /* ... */ });
-    const headerOpacity = scrollY.interpolate({ /* ... */ });
-    const imageScale = scrollY.interpolate({ /* ... */ });
+    const handleShare = async () => {
+        Alert.alert('Partager', 'Fonctionnalité à venir');
+    };
+
+    const toggleFavorite = () => {
+        setIsFavorite(!isFavorite);
+    };
+
+    const headerTranslateY = scrollY.interpolate({
+        inputRange: [0, HEADER_SCROLL_DISTANCE],
+        outputRange: [0, -HEADER_SCROLL_DISTANCE],
+        extrapolate: 'clamp',
+    });
+
+    const imageOpacity = scrollY.interpolate({
+        inputRange: [0, HEADER_SCROLL_DISTANCE / 2, HEADER_SCROLL_DISTANCE],
+        outputRange: [1, 0.5, 0],
+        extrapolate: 'clamp',
+    });
+
+    const headerOpacity = scrollY.interpolate({
+        inputRange: [0, HEADER_SCROLL_DISTANCE / 2, HEADER_SCROLL_DISTANCE],
+        outputRange: [0, 0, 1],
+        extrapolate: 'clamp',
+    });
+
+    const imageScale = scrollY.interpolate({
+        inputRange: [-HEADER_MAX_HEIGHT, 0],
+        outputRange: [2, 1],
+        extrapolate: 'clamp',
+    });
+
     const renderImage = ({ item }: { item: string }) => (
         <View style={styles.imageSlide}>
             <Image source={{ uri: item }} style={styles.productImage} resizeMode="cover" />
         </View>
     );
+
+    const calculateSavings = () => {
+        if (!product.has_wholesale || !product.wholesale_price || !product.min_wholesale_qty) return 0;
+        const unitTotal = product.price * product.min_wholesale_qty;
+        const wholesaleTotal = product.wholesale_price * product.min_wholesale_qty;
+        return unitTotal - wholesaleTotal;
+    };
 
     if (loading || !product) {
         return (
@@ -293,7 +307,11 @@ export default function ProductDetailScreen() {
                                             <Text style={styles.categoryEmoji}>
                                                 {product.category === 'vetement' ? '👗' :
                                                     product.category === 'electronique' ? '📱' :
-                                                        product.category === 'artisanat' ? '🎨' : '📦'}
+                                                        product.category === 'artisanat' ? '🎨' :
+                                                            product.category === 'soins_et_astuces' ? '💄' :
+                                                                product.category === 'maquillage' ? '💋' :
+                                                                    product.category === 'accessoire' ? '👜' :
+                                                                        product.category === 'chaussure' ? '👠' : '📦'}
                                             </Text>
                                             <Text style={styles.categoryText}>{product.category}</Text>
                                         </View>
@@ -311,20 +329,125 @@ export default function ProductDetailScreen() {
                             </View>
                         </View>
 
-                        <View style={styles.priceCard}>
-                            <Text style={styles.priceLabel}>Prix</Text>
-                            <View style={styles.priceRow}>
-                                <Text style={styles.priceAmount}>{product.price.toLocaleString()}</Text>
-                                <Text style={styles.priceCurrency}>FCFA</Text>
+                        {/* Prix avec sélecteur unitaire/gros */}
+                        {product.has_wholesale ? (
+                            <View style={styles.priceOptionsContainer}>
+                                {/* Toggle entre prix unitaire et gros */}
+                                <View style={styles.priceTypeSelector}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.priceTypeButton,
+                                            selectedPriceType === 'unit' && styles.priceTypeButtonActive
+                                        ]}
+                                        onPress={() => setSelectedPriceType('unit')}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Ionicons
+                                            name="pricetag"
+                                            size={18}
+                                            color={selectedPriceType === 'unit' ? '#F6C445' : '#6B7280'}
+                                        />
+                                        <Text style={[
+                                            styles.priceTypeText,
+                                            selectedPriceType === 'unit' && styles.priceTypeTextActive
+                                        ]}>
+                                            Prix unitaire
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.priceTypeButton,
+                                            selectedPriceType === 'wholesale' && styles.priceTypeButtonActive
+                                        ]}
+                                        onPress={() => setSelectedPriceType('wholesale')}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Ionicons
+                                            name="basket"
+                                            size={18}
+                                            color={selectedPriceType === 'wholesale' ? '#10B981' : '#6B7280'}
+                                        />
+                                        <Text style={[
+                                            styles.priceTypeText,
+                                            selectedPriceType === 'wholesale' && styles.priceTypeTextActive
+                                        ]}>
+                                            Prix de gros
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Affichage du prix sélectionné */}
+                                {selectedPriceType === 'unit' ? (
+                                    <View style={styles.priceCard}>
+                                        <View style={styles.priceRow}>
+                                            <Text style={styles.priceAmount}>
+                                                {product.price.toLocaleString()}
+                                            </Text>
+                                            <Text style={styles.priceCurrency}>FCFA</Text>
+                                        </View>
+                                        <Text style={styles.priceLabel}>Prix par unité</Text>
+                                    </View>
+                                ) : (
+                                    <View style={[styles.priceCard, styles.wholesalePriceCard]}>
+                                        <View style={styles.wholesalePriceHeader}>
+                                            <View style={styles.priceRow}>
+                                                <Text style={styles.priceAmount}>
+                                                    {product.wholesale_price.toLocaleString()}
+                                                </Text>
+                                                <Text style={styles.priceCurrency}>FCFA</Text>
+                                            </View>
+                                            <View style={styles.minQtyBadge}>
+                                                <Text style={styles.minQtyText}>
+                                                    Min. {product.min_wholesale_qty} unités
+                                                </Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.savingsContainer}>
+                                            <View style={styles.savingsRow}>
+                                                <Ionicons name="trending-down" size={16} color="#10B981" />
+                                                <Text style={styles.savingsText}>
+                                                    Économisez {calculateSavings().toLocaleString()} FCFA
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.savingsDetail}>
+                                                sur {product.min_wholesale_qty} articles
+                                            </Text>
+                                        </View>
+
+                                        {/* Comparaison des prix */}
+                                        <View style={styles.priceComparison}>
+                                            <View style={styles.comparisonItem}>
+                                                <Text style={styles.comparisonLabel}>Prix unitaire</Text>
+                                                <Text style={styles.comparisonValue}>
+                                                    {product.price.toLocaleString()} FCFA
+                                                </Text>
+                                            </View>
+                                            <Ionicons name="arrow-forward" size={16} color="#6B7280" />
+                                            <View style={styles.comparisonItem}>
+                                                <Text style={styles.comparisonLabel}>Prix de gros</Text>
+                                                <Text style={[styles.comparisonValue, styles.comparisonValueGreen]}>
+                                                    {product.wholesale_price.toLocaleString()} FCFA
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                )}
                             </View>
-                            <TouchableOpacity style={styles.negotiableButton}>
-                                <Ionicons name="cash-outline" size={16} color="#10B981" />
-                                <Text style={styles.negotiableText}>Prix négociable</Text>
-                            </TouchableOpacity>
-                        </View>
+                        ) : (
+                            // Prix simple (sans option de gros)
+                            <View style={styles.priceCard}>
+                                <Text style={styles.priceLabel}>Prix</Text>
+                                <View style={styles.priceRow}>
+                                    <Text style={styles.priceAmount}>{product.price.toLocaleString()}</Text>
+                                    <Text style={styles.priceCurrency}>FCFA</Text>
+                                </View>
+                            </View>
+                        )}
                     </View>
 
-                    {/* Seller Card Premium */}
+                    {/* Seller Card */}
                     <TouchableOpacity
                         style={styles.sellerCard}
                         onPress={() => router.push(`/profile/${product.seller.id}`)}
@@ -371,30 +494,32 @@ export default function ProductDetailScreen() {
                     </TouchableOpacity>
 
                     {/* Description */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Description</Text>
-                        <Text
-                            style={styles.descriptionText}
-                            numberOfLines={showFullDescription ? undefined : 4}
-                        >
-                            {product.description}
-                        </Text>
-                        {product.description && product.description.length > 150 && (
-                            <TouchableOpacity
-                                onPress={() => setShowFullDescription(!showFullDescription)}
-                                style={styles.showMoreButton}
+                    {product.description && (
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Description</Text>
+                            <Text
+                                style={styles.descriptionText}
+                                numberOfLines={showFullDescription ? undefined : 4}
                             >
-                                <Text style={styles.showMoreText}>
-                                    {showFullDescription ? 'Voir moins' : 'Voir plus'}
-                                </Text>
-                                <Ionicons
-                                    name={showFullDescription ? 'chevron-up' : 'chevron-down'}
-                                    size={16}
-                                    color="#F6C445"
-                                />
-                            </TouchableOpacity>
-                        )}
-                    </View>
+                                {product.description}
+                            </Text>
+                            {product.description.length > 150 && (
+                                <TouchableOpacity
+                                    onPress={() => setShowFullDescription(!showFullDescription)}
+                                    style={styles.showMoreButton}
+                                >
+                                    <Text style={styles.showMoreText}>
+                                        {showFullDescription ? 'Voir moins' : 'Voir plus'}
+                                    </Text>
+                                    <Ionicons
+                                        name={showFullDescription ? 'chevron-up' : 'chevron-down'}
+                                        size={16}
+                                        color="#F6C445"
+                                    />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )}
 
                     {/* Product Details */}
                     <View style={styles.section}>
@@ -445,7 +570,7 @@ export default function ProductDetailScreen() {
                                 <View style={styles.trustTextContainer}>
                                     <Text style={styles.trustTitle}>Paiement sécurisé</Text>
                                     <Text style={styles.trustDescription}>
-                                        Transaction protégée par escrow
+                                        Transaction protégée
                                     </Text>
                                 </View>
                             </View>
@@ -480,46 +605,31 @@ export default function ProductDetailScreen() {
                 </View>
             </Animated.ScrollView>
 
-            {/* --- Barre d'action fixe en bas (CTA) --- */}
+            {/* Bottom CTA */}
             <View style={styles.bottomCTA}>
                 <BlurView intensity={95} style={StyleSheet.absoluteFill} tint="light" />
                 <View style={styles.ctaContent}>
-                    {/* 👇 MODIFICATION : Le bouton "Message" utilise la nouvelle logique */}
-                    <TouchableOpacity
-                        style={styles.contactButton}
-                        onPress={onContactSeller} // <--- Utilise la nouvelle fonction
-                        disabled={isCreatingChat}   // <--- Désactivé pendant le chargement
-                        activeOpacity={0.8}
-                    >
-                        {isCreatingChat ? (
-                            <ActivityIndicator color="#1C2B49" />
-                        ) : (
-                            <>
-                                <Ionicons name="chatbubble-ellipses" size={24} color="#1C2B49" />
-                                <Text style={styles.contactButtonText}>Message</Text>
-                            </>
-                        )}
-                    </TouchableOpacity>
-
                     <Animated.View style={[styles.buyButtonWrapper, { transform: [{ scale: pulseAnim }] }]}>
                         <TouchableOpacity
                             style={styles.buyButton}
-                            onPress={handleBuyNow}
+                            onPress={handleWhatsApp}
                             activeOpacity={0.9}
                         >
                             <LinearGradient
-                                colors={['#F6C445', '#F0A500']}
+                                colors={['#03010aff', '#d6a213ff']}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
                                 style={styles.buyButtonGradient}
                             >
-                                <Ionicons name="lock-closed" size={20} color="#1C2B49" />
-                                <Text style={styles.buyButtonText}>Acheter maintenant</Text>
+                                <Ionicons name="logo-whatsapp" size={24} color="#fff" />
+                                <Text style={styles.buyButtonText}>acheter</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </Animated.View>
                 </View>
             </View>
+
+            {!user && <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />}
         </View>
     );
 }
@@ -528,7 +638,7 @@ const styles = StyleSheet.create({
     // --- Conteneurs et état de chargement ---
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FB', // Un gris très clair pour le fond général
+        backgroundColor: '#F8F9FB',
     },
     loadingContainer: {
         flex: 1,
@@ -540,7 +650,7 @@ const styles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: '#FEF3C7', // Fond jaune pâle pour l'indicateur
+        backgroundColor: '#FFFBEB', // CHANGÉ: Jaune safran très clair
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
@@ -548,7 +658,7 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#1F2937', // Texte gris foncé
+        color: '#1F2937',
     },
     scrollView: {
         flex: 1,
@@ -560,7 +670,7 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        height: HEADER_MIN_HEIGHT, // Hauteur minimale du header
+        height: HEADER_MIN_HEIGHT,
         zIndex: 1000,
     },
     fixedHeaderContent: {
@@ -569,7 +679,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 10, // Marge pour la barre de statut
+        paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 10,
     },
     headerIconButton: {
         width: 40,
@@ -582,7 +692,7 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: 17,
         fontWeight: '700',
-        color: '#1C2B49', // Bleu nuit pour le titre
+        color: '#1C2B49',
         textAlign: 'center',
         marginHorizontal: 12,
     },
@@ -590,7 +700,7 @@ const styles = StyleSheet.create({
     // --- Carousel d'images (Header) ---
     imageCarouselContainer: {
         height: HEADER_MAX_HEIGHT,
-        backgroundColor: '#E5E7EB', // Couleur de fond si l'image charge
+        backgroundColor: '#E5E7EB',
     },
     imageSlide: {
         width: width,
@@ -605,7 +715,7 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        height: 140, // Dégradé pour la lisibilité des boutons flottants
+        height: 140,
     },
     floatingActions: {
         position: 'absolute',
@@ -630,7 +740,7 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     favoriteActive: {
-        backgroundColor: 'rgba(255, 255, 255, 0.98)', // Fond blanc pour le favori actif
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
     },
     floatingRightButtons: {
         flexDirection: 'row',
@@ -679,7 +789,7 @@ const styles = StyleSheet.create({
     },
     paginationDots: {
         position: 'absolute',
-        bottom: 38, // Positionné sous le contenu principal
+        bottom: 38,
         flexDirection: 'row',
         alignSelf: 'center',
         gap: 8,
@@ -691,8 +801,8 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.4)',
     },
     dotActive: {
-        backgroundColor: '#F6C445', // Couleur d'accentuation
-        width: 24, // Le point actif est plus large
+        backgroundColor: '#F6C445', // Jaune Safran
+        width: 24,
     },
 
     // --- Contenu principal (sous les images) ---
@@ -701,7 +811,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#F8F9FB',
         borderTopLeftRadius: 28,
         borderTopRightRadius: 28,
-        marginTop: -32, // Superposition sur l'image
+        marginTop: -32,
         paddingTop: 24,
     },
 
@@ -739,7 +849,7 @@ const styles = StyleSheet.create({
     categoryBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FEF3C7',
+        backgroundColor: '#FFFBEB', // CHANGÉ: Jaune safran très clair
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 16,
@@ -751,7 +861,7 @@ const styles = StyleSheet.create({
     categoryText: {
         fontSize: 12,
         fontWeight: '700',
-        color: '#92400E', // Marron foncé pour contraster avec le jaune
+        color: '#B45309', // CHANGÉ: Marron-orangé
         textTransform: 'capitalize',
     },
     timeBadge: {
@@ -768,8 +878,45 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#6B7280',
     },
+
+    // --- Section Prix de Gros ---
+    priceOptionsContainer: {
+        backgroundColor: '#F8F9FB',
+        borderRadius: 16,
+    },
+    priceTypeSelector: {
+        flexDirection: 'row',
+        backgroundColor: '#F3F4F6', // CHANGÉ: Gris plus clair
+        borderRadius: 12,
+        padding: 4,
+        marginBottom: 12,
+    },
+    priceTypeButton: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderRadius: 9,
+        gap: 8,
+    },
+    priceTypeButtonActive: {
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    priceTypeText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#4B5563',
+    },
+    priceTypeTextActive: {
+        color: '#1F2937',
+    },
     priceCard: {
-        backgroundColor: '#F8F9FB', // Fond légèrement différent pour le contraste
         padding: 16,
         borderRadius: 16,
     },
@@ -783,10 +930,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'baseline',
         gap: 8,
-        marginBottom: 12,
     },
     priceAmount: {
-        fontSize: 36,
+        fontSize: 32,
         fontWeight: '800',
         color: '#1F2937',
     },
@@ -795,16 +941,68 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#6B7280',
     },
-    negotiableButton: {
+    wholesalePriceCard: {
+        backgroundColor: '#F0FFF4', // CHANGÉ: Vert très clair
+        borderWidth: 1,
+        borderColor: '#9AE6B4', // CHANGÉ: Vert clair
+    },
+    wholesalePriceHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    minQtyBadge: {
+        backgroundColor: '#10B981',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    minQtyText: {
+        color: '#FFFFFF',
+        fontSize: 11,
+        fontWeight: 'bold',
+    },
+    savingsContainer: {
+        marginTop: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(16, 185, 129, 0.2)',
+    },
+    savingsRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        alignSelf: 'flex-start',
     },
-    negotiableText: {
-        fontSize: 13,
+    savingsText: {
+        color: '#065F46',
+        fontSize: 14,
         fontWeight: '700',
-        color: '#10B981', // Vert pour indiquer une action positive
+    },
+    savingsDetail: {
+        fontSize: 12,
+        color: '#047857',
+        marginLeft: 22,
+    },
+    priceComparison: {
+        marginTop: 10,
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+    },
+    comparisonItem: {
+        alignItems: 'center',
+    },
+    comparisonLabel: {
+        fontSize: 12,
+        color: '#6B7280',
+    },
+    comparisonValue: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+    },
+    comparisonValueGreen: {
+        color: '#10B981',
     },
 
     // --- Carte du vendeur ---
@@ -832,13 +1030,13 @@ const styles = StyleSheet.create({
         height: 60,
         borderRadius: 30,
         borderWidth: 2,
-        borderColor: '#F3F4F6',
+        borderColor: '#F6C445', // CHANGÉ: Jaune Safran
     },
     onlineBadge: {
         width: 14,
         height: 14,
         borderRadius: 7,
-        backgroundColor: '#10B981', // Vert pour "en ligne"
+        backgroundColor: '#10B981',
         position: 'absolute',
         bottom: 2,
         right: 2,
@@ -887,12 +1085,12 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 
-    // --- Sections de contenu (Description, Détails, etc.) ---
+    // --- Sections de contenu ---
     section: {
         paddingHorizontal: 20,
         paddingVertical: 16,
         borderTopWidth: 1,
-        borderTopColor: '#F3F4F6', // Séparateur très léger
+        borderTopColor: '#F3F4F6',
     },
     sectionTitle: {
         fontSize: 18,
@@ -903,7 +1101,7 @@ const styles = StyleSheet.create({
     descriptionText: {
         fontSize: 15,
         color: '#4B5563',
-        lineHeight: 24, // Pour une meilleure lisibilité
+        lineHeight: 24,
     },
     showMoreButton: {
         flexDirection: 'row',
@@ -912,13 +1110,11 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
     },
     showMoreText: {
-        color: '#F6C445',
+        color: '#D97706', // CHANGÉ: Marron-orangé
         fontWeight: 'bold',
         fontSize: 14,
         marginRight: 4,
     },
-
-    // --- Liste des détails du produit ---
     detailsList: {
         gap: 16,
     },
@@ -948,8 +1144,6 @@ const styles = StyleSheet.create({
         color: '#1F2937',
         textTransform: 'capitalize',
     },
-
-    // --- Section Confiance & Sécurité ---
     trustSection: {
         backgroundColor: '#FFF',
         borderRadius: 20,
@@ -996,37 +1190,22 @@ const styles = StyleSheet.create({
         right: 0,
         borderTopWidth: 1,
         borderTopColor: 'rgba(0,0,0,0.05)',
-        marginBottom: 90,
+        marginBottom: 80,
     },
     ctaContent: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingTop: 12,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 16, // Safe area pour iPhone
+        paddingBottom: Platform.OS === 'ios' ? 34 : 16,
         gap: 12,
         backgroundColor: 'transparent',
     },
-    contactButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: '#E5E7EB', // Fond neutre pour l'action secondaire
-        height: 56,
-        borderRadius: 28,
+    buyButtonWrapper: {
         flex: 1,
     },
-    contactButtonText: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#1C2B49',
-    },
-    buyButtonWrapper: {
-        flex: 2, // Le bouton d'achat est plus large
-    },
     buyButton: {
-        shadowColor: '#F59E0B',
+        shadowColor: '#F59E0B', // CHANGÉ: Ombre jaune
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.35,
         shadowRadius: 10,
@@ -1043,6 +1222,6 @@ const styles = StyleSheet.create({
     buyButtonText: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#1C2B49',
+        color: '#1C2B49', // CHANGÉ: Texte sombre pour contraster avec le jaune
     },
 });

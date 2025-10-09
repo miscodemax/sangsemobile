@@ -6,6 +6,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import CameraModal from '../composants/cameramodal';
 import {
     ActivityIndicator,
     Alert,
@@ -133,7 +134,10 @@ const CategorySelector = ({ categories, selectedCategory, onSelect, error }) => 
 };
 
 // Image Picker amélioré
-const ImagePickerField = ({ images, setImages, error }) => {
+const ImagePickerField = ({ images, setImages, error, styles }) => {
+    // 👈 3. ON AJOUTE L'ÉTAT POUR CONTRÔLER LE MODAL
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
+
     const pickImage = async () => {
         if (images.length >= 5) {
             Alert.alert('Maximum atteint', 'Vous pouvez ajouter jusqu\'à 5 photos.');
@@ -143,37 +147,33 @@ const ImagePickerField = ({ images, setImages, error }) => {
             allowsEditing: true,
             aspect: [1, 1],
             quality: 0.8,
+            // Pour la sélection multiple, tu pourras ajouter 'allowsMultipleSelection: true' ici
         });
         if (!result.canceled) {
             setImages([...images, result.assets[0].uri]);
         }
     };
 
-    const takePhoto = async () => {
+    // 👇 4. LA FONCTION 'takePhoto' EST SIMPLIFIÉE
+    const takePhoto = () => {
         if (images.length >= 5) {
             Alert.alert('Maximum atteint', 'Vous pouvez ajouter jusqu\'à 5 photos.');
             return;
         }
-        const permission = await ImagePicker.requestCameraPermissionsAsync();
-        if (!permission.granted) {
-            Alert.alert('Permission refusée', 'Autorisez l\'accès à la caméra.');
-            return;
-        }
-        const result = await ImagePicker.launchCameraAsync({
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-        });
-        if (!result.canceled) {
-            setImages([...images, result.assets[0].uri]);
-        }
+        setIsCameraOpen(true); // Ouvre simplement notre modal personnalisé
+    };
+    
+    // 👇 5. ON AJOUTE LA FONCTION QUI REÇOIT LA PHOTO DU MODAL
+    const handlePictureTaken = (uri) => {
+        setImages([...images, uri]);
+        setIsCameraOpen(false); // Ferme le modal et ajoute l'image
     };
 
-    const removeImage = (index: number) => {
+    const removeImage = (index) => {
         setImages(images.filter((_, i) => i !== index));
     };
 
-    const setAsCover = (index: number) => {
+    const setAsCover = (index) => {
         if (index === 0) return;
         const copy = [...images];
         const [picked] = copy.splice(index, 1);
@@ -183,72 +183,22 @@ const ImagePickerField = ({ images, setImages, error }) => {
 
     return (
         <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-                <View style={[styles.stepBadge, { backgroundColor: '#ec4899' }]}>
-                    <Text style={styles.stepBadgeText}>1</Text>
-                </View>
-                <Text style={styles.sectionTitle}>Vos photos</Text>
-            </View>
-            <Text style={styles.sectionSubtitle}>💡 La première photo sera votre couverture</Text>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
-                {images.map((uri, index) => (
-                    <View key={index} style={styles.imageWrapper}>
-                        <Image source={{ uri }} style={styles.imagePreview} />
-
-                        {index === 0 && (
-                            <View style={styles.coverBadge}>
-                                <Text style={styles.coverBadgeText}>Couverture</Text>
-                            </View>
-                        )}
-
-                        <View style={styles.imageNumber}>
-                            <Text style={styles.imageNumberText}>{index + 1}</Text>
-                        </View>
-
-                        <View style={styles.imageActions}>
-                            {index !== 0 && (
-                                <TouchableOpacity
-                                    style={styles.setCoverBtn}
-                                    onPress={() => setAsCover(index)}
-                                >
-                                    <Text style={styles.setCoverText}>Couverture</Text>
-                                </TouchableOpacity>
-                            )}
-                            <TouchableOpacity
-                                style={styles.removeImageBtn}
-                                onPress={() => removeImage(index)}
-                            >
-                                <Ionicons name="trash-outline" size={18} color="#fff" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                ))}
-
-                {images.length < 5 && (
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                        <TouchableOpacity style={styles.addImageBtn} onPress={pickImage}>
-                            <View style={styles.addImageIcon}>
-                                <Ionicons name="images-outline" size={28} color="#f59e0b" />
-                            </View>
-                            <Text style={styles.addImageText}>Galerie</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.addImageBtn} onPress={takePhoto}>
-                            <View style={styles.addImageIcon}>
-                                <Ionicons name="camera-outline" size={28} color="#f59e0b" />
-                            </View>
-                            <Text style={styles.addImageText}>Photo</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-            </ScrollView>
-
-            <Text style={styles.helperText}>📷 {images.length}/5 photos • Formats: JPG, PNG</Text>
-            {error && <Text style={styles.errorText}>⚠️ {error}</Text>}
+            {/* ... (le JSX de ton ImagePickerField reste le même jusqu'à la fin) ... */}
+            
+            {/* 👇 6. ON AJOUTE LE MODAL À LA FIN DU COMPOSANT */}
+            <Modal visible={isCameraOpen} animationType="slide" onRequestClose={() => setIsCameraOpen(false)}>
+                <CameraModal
+                    onClose={() => setIsCameraOpen(false)}
+                    onPictureTaken={handlePictureTaken}
+                />
+            </Modal>
         </View>
     );
 };
+
+
+
+
 
 // Champ de formulaire moderne
 const ModernFormField = ({ label, required, helper, error, children }) => (
