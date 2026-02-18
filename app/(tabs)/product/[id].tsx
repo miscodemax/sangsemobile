@@ -197,17 +197,29 @@ export default function ProductDetailScreen() {
     try {
       setContactLoading(true);
 
-      // Cherche une conversation existante
-      const { data: existing } = await supabase
+      // Cherche conversation où tu es participant_1
+      const { data: conv1 } = await supabase
         .from("conversations")
         .select("id")
-        .or(
-          `and(participant_1.eq.${user.id},participant_2.eq.${product.seller.id}),and(participant_1.eq.${product.seller.id},participant_2.eq.${user.id})`,
-        )
+        .eq("participant_1", user.id)
+        .eq("participant_2", product.user_id)
         .maybeSingle();
 
-      if (existing) {
-        router.push(`/messages/${existing.id}`);
+      if (conv1) {
+        router.push(`/messages/${conv1.id}`);
+        return;
+      }
+
+      // Cherche conversation où tu es participant_2
+      const { data: conv2 } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("participant_1", product.user_id)
+        .eq("participant_2", user.id)
+        .maybeSingle();
+
+      if (conv2) {
+        router.push(`/messages/${conv2.id}`);
         return;
       }
 
@@ -216,21 +228,25 @@ export default function ProductDetailScreen() {
         .from("conversations")
         .insert({
           participant_1: user.id,
-          participant_2: product.seller.id,
+          participant_2: product.user_id,
           listing_id: product.id,
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erreur création conversation:", error);
+        throw error;
+      }
+
       router.push(`/messages/${newConv.id}`);
-    } catch {
+    } catch (err) {
+      console.error(err);
       Alert.alert("Erreur", "Impossible de démarrer la conversation");
     } finally {
       setContactLoading(false);
     }
   };
-
   const calculateSavings = () => {
     if (
       !product?.has_wholesale ||
