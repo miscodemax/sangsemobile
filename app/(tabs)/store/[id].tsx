@@ -543,7 +543,7 @@ export default function StoreScreen() {
           </View>
           <TouchableOpacity
             style={styles.statCard}
-            onPress={() => router.push("../vendre")}
+            onPress={() => router.push("/vendre")}
           >
             <View style={[styles.statIcon, styles.addIcon]}>
               <Ionicons name="add" size={24} color="#fff" />

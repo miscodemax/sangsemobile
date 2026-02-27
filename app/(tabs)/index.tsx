@@ -343,6 +343,12 @@ export default function ProductsScreen() {
                 </View>
               )}
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => router.push("/favoris")}
+            >
+              <Ionicons name="heart-circle-outline" size={24} color="#941908" />
+            </TouchableOpacity>
           </View>
         </View>
 

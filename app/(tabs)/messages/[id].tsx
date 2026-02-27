@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/authContext";
+import { sendPushNotification } from "@/lib/notifications";
 import { supabase } from "@/lib/supabaseClient";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -137,6 +138,21 @@ export default function ChatScreen() {
         last_message_at: new Date().toISOString(),
       })
       .eq("id", id);
+
+    // Envoie la notification au destinataire
+    if (otherUser?.id) {
+      const { data: senderProfile } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user?.id)
+        .single();
+
+      await sendPushNotification(
+        otherUser.id,
+        senderProfile?.username || "Quelqu'un",
+        content,
+      );
+    }
 
     setSending(false);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -302,6 +318,9 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#fff" },
+  paddingTop: {
+    paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+  },
   flex: { flex: 1 },
 
   // Header
@@ -400,7 +419,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingBottom: Platform.OS === "ios" ? 28 : 80,
+    paddingBottom: Platform.OS === "ios" ? 28 : 70,
   },
   inputRow: {
     flexDirection: "row",

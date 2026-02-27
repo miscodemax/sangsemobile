@@ -1,3 +1,4 @@
+import { registerPushToken } from "@/lib/notifications";
 import { Session, User } from "@supabase/supabase-js";
 import * as WebBrowser from "expo-web-browser";
 import { createContext, useContext, useEffect, useState } from "react";
@@ -41,10 +42,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loadSession();
 
     // Écoute les changements de session
+
+    // Dans onAuthStateChange :
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
+
+        // Enregistre le push token quand connecté
+        if (newSession?.user) {
+          registerPushToken(newSession.user.id);
+        }
       },
     );
 

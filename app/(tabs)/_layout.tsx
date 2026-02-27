@@ -185,15 +185,21 @@ export default function TabLayout() {
         name="vendre"
         options={{
           tabBarShowLabel: false,
-          tabBarButton: (props) => (
-            <CustomTabBarButton
-              {...props}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push("/vendre");
-              }}
-            />
+          tabBarIcon: () => (
+            <View style={styles.fab}>
+              <Ionicons name="add" size={34} color={COLORS.background} />
+            </View>
           ),
+          tabBarItemStyle: {
+            top: -20,
+          },
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push("/vendre");
+          },
         }}
       />
 
