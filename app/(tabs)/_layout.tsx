@@ -1,11 +1,18 @@
 import { useAuth } from "@/context/authContext";
+import { supabase } from "@/lib/supabaseClient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Tabs, useRouter } from "expo-router";
-import React, { useState } from "react";
-import { Platform, StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-// 🎨 Palette de couleurs
+// ─── Palette ──────────────────────────────────────────────────────────────────
 const COLORS = {
   primary: "#FFD700",
   inactive: "#888",
@@ -13,16 +20,39 @@ const COLORS = {
   badge: "#FF3B30",
 };
 
-// 🔔 Icône avec badge
-const TabBarIconWithBadge = ({ name, color, size, badgeCount = 0 }) => (
-  <View style={{ width: size, height: size }}>
+// ─── Badge Component ──────────────────────────────────────────────────────────
+const TabBarIconWithBadge = ({
+  name,
+  color,
+  size,
+  badgeCount = 0,
+}: {
+  name: any;
+  color: string;
+  size: number;
+  badgeCount?: number;
+}) => (
+  <View
+    style={{
+      width: size + 10,
+      height: size + 10,
+      justifyContent: "center",
+      alignItems: "center",
+    }}
+  >
     <Ionicons name={name} size={size} color={color} />
-    {badgeCount > 0 && <View style={styles.badgeContainer} />}
+    {badgeCount > 0 && (
+      <View style={styles.badgeContainer}>
+        <Text style={styles.badgeText}>
+          {badgeCount > 99 ? "99+" : badgeCount}
+        </Text>
+      </View>
+    )}
   </View>
 );
 
-// ➕ Bouton central personnalisé
-const CustomTabBarButton = ({ onPress }) => (
+// ─── FAB Center Button ────────────────────────────────────────────────────────
+const CustomTabBarButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity
     style={styles.fabContainer}
     activeOpacity={0.9}
@@ -34,12 +64,68 @@ const CustomTabBarButton = ({ onPress }) => (
   </TouchableOpacity>
 );
 
+// ─── Main Layout ──────────────────────────────────────────────────────────────
 export default function TabLayout() {
   const { user } = useAuth();
   const router = useRouter();
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const [favoriteNotifications] = useState(2);
-  const [profileNotifications] = useState(0);
+  // ─── Fetch unread messages count ───────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    fetchUnreadCount();
+
+    // Écoute en temps réel les nouveaux messages
+    const channel = supabase
+      .channel("unread_messages")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+        () => fetchUnreadCount(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+        },
+        () => fetchUnreadCount(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  async function fetchUnreadCount() {
+    if (!user) return;
+
+    // Récupère les conversations de l'utilisateur
+    const { data: convs } = await supabase
+      .from("conversations")
+      .select("id")
+      .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`);
+
+    if (!convs || convs.length === 0) return;
+
+    const convIds = convs.map((c) => c.id);
+
+    // Compte les messages non lus envoyés par d'autres
+    const { count } = await supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .in("conversation_id", convIds)
+      .eq("is_read", false)
+      .neq("sender_id", user.id);
+
+    setUnreadCount(count || 0);
+  }
 
   return (
     <Tabs
@@ -70,7 +156,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 🏬 Store dynamique */}
+      {/* 🏬 Store */}
       <Tabs.Screen
         name="store/[id]"
         options={{
@@ -86,9 +172,7 @@ export default function TabLayout() {
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
-            if (!user?.id) {
-              console.log("Utilisateur non connecté");
-            } else {
+            if (user?.id) {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push(`/store/${user.id}`);
             }
@@ -96,7 +180,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ➕ Bouton central "Vendre" */}
+      {/* ➕ Vendre (FAB) */}
       <Tabs.Screen
         name="vendre"
         options={{
@@ -113,17 +197,17 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ❤️ Favoris */}
+      {/* 💬 Messages */}
       <Tabs.Screen
-        name="favoris"
+        name="messages/index"
         options={{
-          title: "Favoris",
+          title: "Messages",
           tabBarIcon: ({ color, size, focused }) => (
             <TabBarIconWithBadge
-              name={focused ? "heart" : "heart-outline"}
+              name={focused ? "chatbubbles" : "chatbubbles-outline"}
               size={size}
               color={color}
-              badgeCount={favoriteNotifications}
+              badgeCount={unreadCount}
             />
           ),
         }}
@@ -133,26 +217,23 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 👤 Profil dynamique */}
+      {/* 👤 Profil */}
       <Tabs.Screen
         name="profile/[id]"
         options={{
           title: "Profil",
           tabBarIcon: ({ color, size, focused }) => (
-            <TabBarIconWithBadge
+            <Ionicons
               name={focused ? "person" : "person-outline"}
               size={size}
               color={color}
-              badgeCount={profileNotifications}
             />
           ),
         }}
         listeners={{
           tabPress: (e) => {
             e.preventDefault();
-            if (!user?.id) {
-              console.log("Utilisateur non connecté");
-            } else {
+            if (user?.id) {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push(`/profile/${user.id}`);
             }
@@ -161,16 +242,16 @@ export default function TabLayout() {
       />
 
       {/* 🔒 Pages cachées */}
+      <Tabs.Screen name="favoris" options={{ href: null }} />
       <Tabs.Screen name="product/[id]" options={{ href: null }} />
       <Tabs.Screen name="edit/[id]" options={{ href: null }} />
       <Tabs.Screen name="editprofile/[id]" options={{ href: null }} />
-      <Tabs.Screen name="messages/index" options={{ href: null }} />
       <Tabs.Screen name="messages/[id]" options={{ href: null }} />
     </Tabs>
   );
 }
 
-// 💅 Styles
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   tabBarStyle: {
     backgroundColor: COLORS.background,
@@ -210,13 +291,21 @@ const styles = StyleSheet.create({
   },
   badgeContainer: {
     position: "absolute",
-    right: -6,
+    right: -2,
     top: -2,
     backgroundColor: COLORS.badge,
-    borderRadius: 8,
-    width: 10,
-    height: 10,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
     borderWidth: 2,
     borderColor: COLORS.background,
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
   },
 });

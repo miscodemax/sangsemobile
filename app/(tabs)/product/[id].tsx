@@ -711,7 +711,7 @@ export default function ProductDetailScreen() {
             )}
           </TouchableOpacity>
 
-          {/* WhatsApp / Buy button */}
+          {/* contact chat / Buy button */}
           <Animated.View
             style={[
               styles.buyButtonWrapper,
@@ -720,7 +720,7 @@ export default function ProductDetailScreen() {
           >
             <TouchableOpacity
               style={styles.buyButton}
-              onPress={handleWhatsApp}
+              onPress={handleContact}
               activeOpacity={0.9}
             >
               <LinearGradient
@@ -729,8 +729,12 @@ export default function ProductDetailScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.buyButtonGradient}
               >
-                <Ionicons name="logo-whatsapp" size={24} color="#fff" />
-                <Text style={styles.buyButtonText}>Acheter</Text>
+                <Ionicons
+                  name="chatbubble-ellipses"
+                  size={20}
+                  color="#6C63FF"
+                />
+                <Text style={styles.buyButtonText}>Contacter</Text>
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>

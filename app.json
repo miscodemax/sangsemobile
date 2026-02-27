@@ -4,7 +4,7 @@
     "slug": "app-mobile-sangse",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo_sangse.jpeg",
     "scheme": "appmobilesangse",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -22,13 +22,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/logo_sangse.jpeg",
         "backgroundColor": "#ffffff"
       },
       "package": "com.sangse.appmobile",
-      "permissions": [
-        "INTERNET"
-      ],
+      "permissions": ["INTERNET"],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -40,17 +38,14 @@
               "pathPrefix": "/callback"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/logo_sangse.jpeg"
     },
     "plugins": [
       [
@@ -65,7 +60,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/logo_sangse.jpeg",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
